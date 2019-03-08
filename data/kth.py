@@ -4,7 +4,8 @@ import numpy as np
 import socket
 import torch
 from scipy import misc
-from torch.utils.serialization import load_lua
+# from torch.utils.serialization import load_lua
+import pickle
 
 class KTH(object):
 
@@ -12,7 +13,7 @@ class KTH(object):
         self.data_root = '%s/KTH/processed/' % data_root
         self.seq_len = seq_len
         self.data_type = data_type
-        self.image_size = image_size 
+        self.image_size = image_size
         self.classes = ['boxing', 'handclapping', 'handwaving', 'jogging', 'running', 'walking']
 
         self.dirs = os.listdir(self.data_root)
@@ -27,8 +28,9 @@ class KTH(object):
 
         self.data= {}
         for c in self.classes:
-            self.data[c] = load_lua('%s/%s/%s_meta%dx%d.t7' % (self.data_root, c, data_type, image_size, image_size))
-     
+            with open('%s/%s/%s_meta%dx%d.pkl' % (self.data_root, c, data_type, image_size, image_size), 'rb') as fi:
+                self.data[c] = pickle.load(fi)
+
 
         self.seed_set = False
 
@@ -44,9 +46,9 @@ class KTH(object):
                 break
         dname = '%s/%s/%s' % (self.data_root, c, vid['vid'])
         st = random.randint(0, len(vid['files'][seq_idx])-t)
-           
 
-        seq = [] 
+
+        seq = []
         for i in range(st, st+t):
             fname = '%s/%s' % (dname, vid['files'][seq_idx][i])
             im = misc.imread(fname)/255.
@@ -54,7 +56,7 @@ class KTH(object):
         return np.array(seq)
 
     # to speed up training of drnet, don't get a whole sequence when we only need 4 frames
-    # x_c1, x_c2, x_p1, x_p2 
+    # x_c1, x_c2, x_p1, x_p2
     def get_drnet_data(self):
         c_idx = np.random.randint(len(self.classes))
         c = self.classes[c_idx]
@@ -63,8 +65,8 @@ class KTH(object):
         seq_idx = np.random.randint(len(vid['files']))
         dname = '%s/%s/%s' % (self.data_root, c, vid['vid'])
         seq_len = len(vid['files'][seq_idx])
-           
-        seq = [] 
+
+        seq = []
         for i in range(4):
             t = np.random.randint(seq_len)
             fname = '%s/%s' % (dname, vid['files'][seq_idx][t])
