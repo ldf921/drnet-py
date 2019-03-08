@@ -15,8 +15,8 @@ import functools
 from torchvision import datasets, transforms
 from torch.autograd import Variable
 from data.moving_mnist import MovingMNIST
-from data.kth import KTH 
-from data import suncg  
+from data.kth import KTH
+from data import suncg
 
 
 hostname = socket.gethostname()
@@ -37,26 +37,26 @@ def load_dataset(opt):
                 num_digits=2)
     elif opt.dataset == 'suncg':
         train_data = suncg.SUNCG(
-                train=True, 
+                train=True,
                 data_root=opt.data_root,
-                seq_len=opt.max_step, 
+                seq_len=opt.max_step,
                 image_size=opt.image_width)
         test_data = suncg.SUNCG(
-                train=False, 
+                train=False,
                 data_root=opt.data_root,
-                seq_len=opt.max_step, 
+                seq_len=opt.max_step,
                 image_size=opt.image_width)
     elif opt.dataset == 'kth':
         train_data = KTH(
-                train=True, 
+                train=True,
                 data_root=opt.data_root,
-                seq_len=opt.max_step, 
+                seq_len=opt.max_step,
                 image_size=opt.image_width,
                 data_type=opt.data_type)
         test_data = KTH(
-                train=False, 
+                train=False,
                 data_root=opt.data_root,
-                seq_len=opt.max_step, 
+                seq_len=opt.max_step,
                 image_size=opt.image_width,
                 data_type=opt.data_type)
     return train_data, test_data
@@ -140,7 +140,7 @@ def make_image(tensor):
         tensor = tensor.expand(3, tensor.size(1), tensor.size(2))
     # pdb.set_trace()
     return scipy.misc.toimage(tensor.numpy(),
-                              high=255*tensor.max(),
+                              high=255*tensor.max().item(),
                               channel_axis=0)
 
 def save_image(filename, tensor):
