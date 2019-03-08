@@ -26,7 +26,7 @@ class UCF:
         self.max_dist = 80
 
         self.seed_set = False
-        with open(os.path.join(data_root, 'UCF101', 'frames_%dx%d' % (image_size, image_size), '%s%d.pkl' % (data_type, split)), 'r') as fi:
+        with open(os.path.join(data_root, 'UCF101', 'frames_%dx%d' % (image_size, image_size), '%s%d.pkl' % (data_type, split)), 'rb') as fi:
             self.data = pickle.load(fi)
 
     def get_sequence(self):
