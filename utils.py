@@ -49,12 +49,14 @@ def load_dataset(opt):
     elif opt.dataset == 'kth':
         train_data = KTH(
                 train=True,
+                pose=opt.pose,
                 data_root=opt.data_root,
                 seq_len=opt.max_step,
                 image_size=opt.image_width,
                 data_type=opt.data_type)
         test_data = KTH(
                 train=False,
+                pose=opt.pose,
                 data_root=opt.data_root,
                 seq_len=opt.max_step,
                 image_size=opt.image_width,
@@ -64,7 +66,12 @@ def load_dataset(opt):
 def sequence_input(seq, dtype):
     return [Variable(x.type(dtype)) for x in seq]
 
-def normalize_data(opt, dtype, sequence):
+def normalize_data(opt, dtype, data):
+    if isinstance(data, list):
+        sequence, pose = data
+        pose.transpose_(0, 1)
+    else:
+        sequence = data
     if opt.dataset == 'moving_mnist':
         sequence.transpose_(0, 1)
         if opt.channels > 1:
@@ -77,7 +84,11 @@ def normalize_data(opt, dtype, sequence):
     else:
         sequence.transpose_(0, 1)
 
-    return sequence_input(sequence, dtype)
+
+    if isinstance(data, list):
+        return sequence_input(sequence, dtype), sequence_input(pose, dtype)
+    else:
+        return sequence_input(sequence, dtype)
 
 def is_sequence(arg):
     return (not hasattr(arg, "strip") and

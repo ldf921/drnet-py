@@ -9,7 +9,7 @@ import pickle
 
 class KTH(object):
 
-    def __init__(self, train, data_root, seq_len = 20, image_size=64, data_type='drnet'):
+    def __init__(self, train, data_root, seq_len = 20, image_size=64, data_type='drnet', pose=False):
         self.data_root = '%s/KTH/processed/' % data_root
         self.seq_len = seq_len
         self.data_type = data_type
@@ -27,8 +27,15 @@ class KTH(object):
             data_type = 'test'
 
         self.data= {}
+        self.pose = pose
+        if pose:
+            meta_file = 'pose'
+            self.kp_mask = np.arange(51) % 3 != 2
+            print('using external pose')
+        else:
+            meta_file = 'meta'
         for c in self.classes:
-            with open('%s/%s/%s_meta%dx%d.pkl' % (self.data_root, c, data_type, image_size, image_size), 'rb') as fi:
+            with open('%s/%s/%s_%s%dx%d.pkl' % (self.data_root, c, data_type, meta_file, image_size, image_size), 'rb') as fi:
                 self.data[c] = pickle.load(fi)
 
 
@@ -49,10 +56,17 @@ class KTH(object):
 
 
         seq = []
+        pose = []
         for i in range(st, st+t):
             fname = '%s/%s' % (dname, vid['files'][seq_idx][i])
             im = misc.imread(fname)/255.
             seq.append(im)
+            if self.pose:
+                pose.append(self.get_pose_code(vid['poses'][seq_idx][i]))
+        if self.pose:
+            return np.array(seq), np.stack(pose)
+        else:
+            return np.array(seq)
         return np.array(seq)
 
     # to speed up training of drnet, don't get a whole sequence when we only need 4 frames
@@ -67,12 +81,34 @@ class KTH(object):
         seq_len = len(vid['files'][seq_idx])
 
         seq = []
+        pose = []
         for i in range(4):
             t = np.random.randint(seq_len)
             fname = '%s/%s' % (dname, vid['files'][seq_idx][t])
             im = misc.imread(fname)/255.
             seq.append(im)
-        return np.array(seq)
+            if self.pose:
+                pose.append(self.get_pose_code(vid['poses'][seq_idx][t]))
+        if self.pose:
+            return np.array(seq), np.stack(pose)
+        else:
+            return np.array(seq)
+
+    def get_pose_code(self, pose_dict):
+        if pose_dict is None:
+            kp = np.ones(35)
+        else:
+            kp = np.array(pose_dict['keypoints'])
+            kp = (kp[self.kp_mask] / (self.image_size / 2)) - 1
+            kp = np.concatenate([[0,], kp])
+        return kp
+
+    @staticmethod
+    def totensor(tensor):
+        if isinstance(tensor, tuple):
+            return tuple([torch.from_numpy(t) for t in tensor])
+        else:
+            return torch.from_numpy(t)
 
     def __getitem__(self, index):
         if not self.seed_set:
@@ -81,12 +117,13 @@ class KTH(object):
             np.random.seed(index)
             #torch.manual_seed(index)
         if not self.train or self.data_type == 'sequence':
-            return torch.from_numpy(self.get_sequence())
+            return self.totensor(self.get_sequence())
         elif self.data_type == 'drnet':
-            return torch.from_numpy(self.get_drnet_data())
+            return self.totensor(self.get_drnet_data())
         else:
             raise ValueError('Unknown data type: %d. Valid type: drnet | sequence.' % self.data_type)
 
     def __len__(self):
+        return 1000
         return len(self.dirs)*36*5 # arbitrary
 

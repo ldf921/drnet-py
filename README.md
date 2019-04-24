@@ -15,5 +15,5 @@ The ```--imageSize``` flag specifiec the image resolution. Experimental results 
 I will be most responsive regarding questions about the code if you email me at denton@cs.nyu.edu.
 
 ```
-python train_drnet.py --dataset kth --data_root ~/datasets --image_width 128
+python train_drnet.py --dataset kth --data_root ../datasets --image_width 128
 ```

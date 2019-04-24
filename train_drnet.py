@@ -34,10 +34,11 @@ parser.add_argument('--pose_model', default='dcgan', help='model type (dcgan | u
 parser.add_argument('--data_threads', type=int, default=5, help='number of parallel data loading threads')
 parser.add_argument('--normalize', action='store_true', help='if true, normalize pose vector')
 parser.add_argument('--data_type', default='drnet', help='speed up data loading for drnet training')
+parser.add_argument('--pose', action='store_true', help='use the extracted pose code')
 
 
 opt = parser.parse_args()
-name = 'content_model=%s-pose_model=%s-content_dim=%d-pose_dim=%d-max_step=%d-sd_weight=%.3f-lr=%.3f-sd_nf=%d-normalize=%s' % (opt.content_model, opt.pose_model, opt.content_dim, opt.pose_dim, opt.max_step, opt.sd_weight, opt.lr, opt.sd_nf, opt.normalize)
+name = 'content_model=%s-pose_model=%s-content_dim=%d-pose_dim=%d-max_step=%d-sd_weight=%.3f-lr=%.3f-sd_nf=%d-normalize=%s-pose=%d' % (opt.content_model, opt.pose_model, opt.content_dim, opt.pose_dim, opt.max_step, opt.sd_weight, opt.lr, opt.sd_nf, opt.normalize, int(opt.pose))
 opt.log_dir = '%s/%s%dx%d/%s' % (opt.log_dir, opt.dataset, opt.image_width, opt.image_width, name)
 
 os.makedirs('%s/rec/' % opt.log_dir, exist_ok=True)
@@ -148,15 +149,24 @@ testing_batch_generator = get_testing_batch()
 
 # --------- plotting funtions ------------------------------------
 def plot_rec(x, epoch):
-      x_c = x[0]
-      x_p = x[np.random.randint(1, opt.max_step)]
+      if opt.pose:
+          x, p = x
+          x_c = x[0]
+          h_c = netEC(x_c)
+          t = np.random.randint(1, opt.max_step)
+          x_p = x[t]
+          h_p = p[t]
+          h_p = h_p.unsqueeze(2).unsqueeze(3)
+      else:
+          x_c = x[0]
+          x_p = x[np.random.randint(1, opt.max_step)]
 
-      h_c = netEC(x_c)
-      h_p = netEP(x_p)
+          h_c = netEC(x_c)
+          h_p = netEP(x_p)
+
       rec = netD([h_c, h_p])
-
       x_c, x_p, rec = x_c.data, x_p.data, rec.data
-      fname = '%s/rec/%d.png' % (opt.log_dir, epoch) 
+      fname = '%s/rec/%d.png' % (opt.log_dir, epoch)
       to_plot = []
       row_sz = 5
       nplot = 20
@@ -167,11 +177,13 @@ def plot_rec(x, epoch):
 
 
 def plot_analogy(x, epoch):
+    if opt.pose:
+        x, p = x
     x_c = x[0]
 
     h_c = netEC(x_c)
     nrow = 10
-    row_sz = opt.max_step 
+    row_sz = opt.max_step
     to_plot = []
     row = [xi[0].data for xi in x]
     zeros = torch.zeros(opt.channels, opt.image_width, opt.image_width)
@@ -180,23 +192,63 @@ def plot_analogy(x, epoch):
         to_plot.append([x[0][i].data])
 
     for j in range(0, row_sz):
-        h_p = netEP(x[j]).data
+        # h_p = netEP(x[j]).data
+        h_p = p[j].unsqueeze(2).unsqueeze(3)
         for i in range(nrow):
             h_p[i] = h_p[0]
         rec = netD([h_c, Variable(h_p)])
         for i in range(nrow):
             to_plot[i+1].append(rec[i].data.clone())
 
-    fname = '%s/analogy/%d.png' % (opt.log_dir, epoch) 
+    fname = '%s/analogy/%d.png' % (opt.log_dir, epoch)
     utils.save_tensors_image(fname, to_plot)
 
 # --------- training funtions ------------------------------------
+def train_pose(x, p):
+    netEP.zero_grad()
+    netEC.zero_grad()
+    netD.zero_grad()
+
+    x_c1 = x[0]
+    x_c2 = x[1]
+    x_p1 = x[2]
+    x_p2 = x[3]
+
+    h_p1 = p[2]
+    h_p2 = p[3]
+    h_p1 = h_p1.unsqueeze(2).unsqueeze(3)
+
+    h_c1 = netEC(x_c1)
+    h_c2 = netEC(x_c2)[0].detach() if opt.content_model[-4:] == 'unet' else netEC(x_c2).detach() # used as target for sim loss
+
+    # similarity loss: ||h_c1 - h_c2||
+    sim_loss = mse_criterion(h_c1[0] if opt.content_model[-4:] == 'unet' else h_c1, h_c2)
+
+    # reconstruction loss: ||D(h_c1, h_p1), x_p1||
+    rec = netD([h_c1, h_p1])
+    rec_loss = mse_criterion(rec, x_p1)
+
+    # scene discriminator loss: maximize entropy of output
+    # target = torch.cuda.FloatTensor(opt.batch_size, 1).fill_(0.5)
+    # out = netC([h_p1, h_p2])
+    # sd_loss = bce_criterion(out, Variable(target))
+
+    # full loss
+    # loss = sim_loss + rec_loss + opt.sd_weight*sd_loss
+    loss = sim_loss + rec_loss
+    loss.backward()
+
+    optimizerEC.step()
+    optimizerEP.step()
+    optimizerD.step()
+
+    return sim_loss.data.cpu().numpy(),rec_loss.data.cpu().numpy()
+
 def train(x):
     netEP.zero_grad()
     netEC.zero_grad()
     netD.zero_grad()
 
-    #x_c1 = x[0]
     x_c1 = x[0]
     x_c2 = x[1]
     x_p1 = x[2]
@@ -212,7 +264,7 @@ def train(x):
     sim_loss = mse_criterion(h_c1[0] if opt.content_model[-4:] == 'unet' else h_c1, h_c2)
 
 
-    # reconstruction loss: ||D(h_c1, h_p1), x_p1|| 
+    # reconstruction loss: ||D(h_c1, h_p1), x_p1||
     rec = netD([h_c1, h_p1])
     rec_loss = mse_criterion(rec, x_p1)
 
@@ -229,7 +281,7 @@ def train(x):
     optimizerEP.step()
     optimizerD.step()
 
-    return sim_loss.data.cpu().numpy(),rec_loss.data.cpu().numpy() 
+    return sim_loss.data.cpu().numpy(),rec_loss.data.cpu().numpy()
 
 def train_scene_discriminator(x):
     netC.zero_grad()
@@ -270,14 +322,19 @@ for epoch in range(opt.niter):
         x = next(training_batch_generator)
 
         # train scene discriminator
-        sd_loss, sd_acc = train_scene_discriminator(x)
-        epoch_sd_loss += sd_loss
-        epoch_sd_acc += sd_acc
+        if opt.pose:
+            sim_loss, rec_loss = train_pose(*x)
+            epoch_sim_loss += sim_loss
+            epoch_rec_loss += rec_loss
+        else:
+            sd_loss, sd_acc = train_scene_discriminator(x)
+            epoch_sd_loss += sd_loss
+            epoch_sd_acc += sd_acc
 
-        # train main model
-        sim_loss, rec_loss = train(x)
-        epoch_sim_loss += sim_loss
-        epoch_rec_loss += rec_loss
+            # train main model
+            sim_loss, rec_loss = train(x)
+            epoch_sim_loss += sim_loss
+            epoch_rec_loss += rec_loss
 
 
     progress.finish()
