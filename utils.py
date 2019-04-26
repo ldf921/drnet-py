@@ -78,7 +78,7 @@ def get_dataloader(opt):
     test_loader = DataLoader(test_data,
                              num_workers=opt.data_threads,
                              batch_size=opt.batch_size,
-                             shuffle=True,
+                             shuffle=False,
                              drop_last=True,
                              pin_memory=True)
     return train_loader, test_loader
