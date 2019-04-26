@@ -23,9 +23,9 @@ parser.add_argument('--seed', default=1, type=int, help='manual seed')
 parser.add_argument('--epoch_size', type=int, default=600, help='epoch size')
 parser.add_argument('--content_dim', type=int, default=128, help='size of the content vector')
 parser.add_argument('--pose_dim', type=int, default=10, help='size of the pose vector')
-parser.add_argument('--image_width', type=int, default=64, help='the height / width of the input image to network')
+parser.add_argument('--image_width', type=int, default=128, help='the height / width of the input image to network')
 parser.add_argument('--channels', default=3, type=int)
-parser.add_argument('--dataset', default='moving_mnist', help='dataset to train with')
+parser.add_argument('--dataset', default='kth', help='dataset to train with')
 parser.add_argument('--max_step', type=int, default=20, help='maximum distance between frames')
 parser.add_argument('--sd_weight', type=float, default=0.0001, help='weight on adversarial loss')
 parser.add_argument('--sd_nf', type=int, default=100, help='number of layers')
@@ -34,7 +34,7 @@ parser.add_argument('--pose_model', default='dcgan', help='model type (dcgan | u
 parser.add_argument('--data_threads', type=int, default=5, help='number of parallel data loading threads')
 parser.add_argument('--normalize', action='store_true', help='if true, normalize pose vector')
 parser.add_argument('--data_type', default='drnet', help='speed up data loading for drnet training')
-parser.add_argument('--pose', action='store_true', help='use the extracted pose code')
+parser.add_argument('--pose', default=True, action='store_true', help='use the extracted pose code')
 
 
 opt = parser.parse_args()
@@ -175,8 +175,10 @@ def plot_analogy(opt, models, x, epoch):
         to_plot.append([x[0][i].data])
 
     for j in range(0, row_sz):
-        # h_p = netEP(x[j]).data
-        h_p = p[j].unsqueeze(2).unsqueeze(3)
+        if opt.pose: 
+            h_p = p[j].unsqueeze(2).unsqueeze(3) 
+        else: 
+            h_p = netEP(x[j])
         for i in range(nrow):
             h_p[i] = h_p[0]
         rec = netD([h_c, Variable(h_p)])
@@ -309,6 +311,7 @@ def train_scene_discriminator(models, optimizers, criterions, x):
 def main():
     # load dataset
     train_loader, test_loader = utils.get_normalized_dataloader(opt)
+    test_loader = iter(test_loader)
 
     # get networks, criterions and optimizers
     netEC, netEP, netD, netC = get_initialized_network(opt)
