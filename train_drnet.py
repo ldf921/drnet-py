@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader
 import utils
 import itertools
 import progressbar
+from shutil import copyfile
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--lr', default=0.002, type=float, help='learning rate')
@@ -357,3 +358,5 @@ for epoch in range(opt.niter):
         'netEC': netEC,
         'opt': opt},
         '%s/model.pth' % opt.log_dir)
+    if epoch % 15 == 0:
+        copyfile('%s/model.pth' % opt.log_dir, '%s/model-%d.pth' % (opt.log_dir, epoch))
