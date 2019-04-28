@@ -1,2 +1,4 @@
-torchfile
+tqdm
+torch
+numpy
 progressbar2

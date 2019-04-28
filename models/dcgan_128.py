@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+
 class dcgan_conv(nn.Module):
     def __init__(self, nin, nout):
         super(dcgan_conv, self).__init__()
@@ -25,6 +26,7 @@ class dcgan_upconv(nn.Module):
 
     def forward(self, input):
         return self.main(input)
+
 
 class pose_encoder(nn.Module):
     def __init__(self, pose_dim, nc=1, normalize=False):
@@ -55,6 +57,7 @@ class pose_encoder(nn.Module):
         else:
             return output
 
+
 class content_encoder(nn.Module):
     def __init__(self, content_dim, nc=1):
         super(content_encoder, self).__init__()
@@ -78,6 +81,7 @@ class content_encoder(nn.Module):
 
     def forward(self, input):
         return self.main(input)
+
 
 class decoder(nn.Module):
     def __init__(self, content_dim, pose_dim, nc=1):
