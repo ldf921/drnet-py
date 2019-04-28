@@ -1,14 +1,62 @@
 import torch
-import socket
+import itertools
+from torch import nn as nn
 import numpy as np
 import scipy.misc
 import functools
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
+from typing import Tuple
 
 from data.moving_mnist import MovingMNIST
 from data.kth import KTH
 from data import suncg
+
+
+def get_initialized_network(opt) -> Tuple[nn.Module]:
+    """
+    :return: content and pose encoder, decoder and scene discriminator, with `utils.init_weights` applied
+    """
+    if opt.image_width == 64:
+        import models.resnet_64 as resnet_models
+        import models.dcgan_64 as dcgan_models
+        import models.dcgan_unet_64 as dcgan_unet_models
+        import models.vgg_unet_64 as vgg_unet_models
+    elif opt.image_width == 128:
+        import models.resnet_128 as resnet_models
+        import models.dcgan_128 as dcgan_models
+        import models.dcgan_unet_128 as dcgan_unet_models
+        import models.vgg_unet_128 as vgg_unet_models
+    import models.classifiers as classifiers
+
+    # load models
+    if opt.content_model == 'dcgan_unet':
+        netEC = dcgan_unet_models.content_encoder(opt.content_dim, opt.channels)
+        netD = dcgan_unet_models.decoder(opt.content_dim, opt.pose_dim, opt.channels)
+    elif opt.content_model == 'vgg_unet':
+        netEC = vgg_unet_models.content_encoder(opt.content_dim, opt.channels)
+        netD = vgg_unet_models.decoder(opt.content_dim, opt.pose_dim, opt.channels)
+    elif opt.content_model == 'dcgan':
+        netEC = dcgan_models.content_encoder(opt.content_dim, opt.channels)
+        netD = dcgan_models.decoder(opt.content_dim, opt.pose_dim, opt.channels)
+    else:
+        raise ValueError('Unknown content model: %s' % opt.content_model)
+
+    if opt.pose_model == 'dcgan':
+        netEP = dcgan_models.pose_encoder(opt.pose_dim, opt.channels, normalize=opt.normalize)
+    elif opt.pose_model == 'resnet':
+        netEP = resnet_models.pose_encoder(opt.pose_dim, opt.channels, normalize=opt.normalize)
+    else:
+        raise ValueError('Unknown pose model: %s' % opt.pose_model)
+    netC = classifiers.scene_discriminator(opt.pose_dim, opt.sd_nf)
+
+    netEC.apply(init_weights)
+    netEP.apply(init_weights)
+    netD.apply(init_weights)
+    netC.apply(init_weights)
+
+    return netEC, netEP, netD, netC
+
 
 class NormalizedDataLoader(DataLoader):
     def __init__(self, dataloader, opt):
@@ -128,14 +176,12 @@ def is_sequence(arg):
             hasattr(arg, "__iter__")))
 
 
-def image_to_tensor(inputs, padding=1) -> torch.tensor:
-    # assert is_sequence(inputs)
+def tensor_seq_to_tensor(inputs, padding=1) -> torch.tensor:
     assert len(inputs) > 0
-    # print(inputs)
 
     # if this is a list of lists, unpack them all and grid them up
     if is_sequence(inputs[0]) or (hasattr(inputs, "dim") and inputs.dim() > 4):
-        images = [image_to_tensor(x) for x in inputs]
+        images = [tensor_seq_to_tensor(x) for x in inputs]
         if images[0].dim() == 3:
             c_dim = images[0].size(0)
             x_dim = images[0].size(1)
@@ -172,24 +218,19 @@ def image_to_tensor(inputs, padding=1) -> torch.tensor:
                             x_dim,
                             y_dim * len(images) + padding * (len(images)-1))
         for i, image in enumerate(images):
-            result[:, :, i * y_dim + i * padding :
-                   (i+1) * y_dim + i * padding].copy_(image)
+            result[:, :, i * y_dim + i * padding:(i+1) * y_dim + i * padding].copy_(image)
         return result
 
 
-def make_image(tensor):
+def tensor_seq_to_img(inputs, padding=1):
+    tensor = tensor_seq_to_tensor(inputs, padding)
     tensor = tensor.cpu().clamp(0, 1)
     if tensor.size(0) == 1:
         tensor = tensor.expand(3, tensor.size(1), tensor.size(2))
-    return scipy.misc.toimage(tensor.numpy(),
-                              high=255*tensor.max().item(),
-                              channel_axis=0)
-
-
-def save_tensors_image(filename, inputs, padding=1):
-    image_tensor = image_to_tensor(inputs, padding)
-    img = make_image(image_tensor)
-    img.save(filename)
+    img = scipy.misc.toimage(tensor.numpy(),
+                             high=255*tensor.max().item(),
+                             channel_axis=0)
+    return img
 
 
 def prod(l):
@@ -217,4 +258,114 @@ def init_weights(m):
     elif classname.find('BatchNorm') != -1:
         m.weight.data.normal_(1.0, 0.02)
         m.bias.data.fill_(0)
+
+
+# --------- plotting functions ------------------------------------
+def plot_rec(pose, models, x, max_step):
+    netEC, netEP, netD, _ = models
+    if pose:
+        x, p = x
+        x_c = x[0]
+        h_c = netEC(x_c)
+        t = np.random.randint(1, max_step)
+        x_p = x[t]
+        h_p = p[t]
+        h_p = h_p.unsqueeze(2).unsqueeze(3)
+    else:
+        x_c = x[0]
+        x_p = x[np.random.randint(1, max_step)]
+
+        h_c = netEC(x_c)
+        h_p = netEP(x_p)
+
+    rec = netD([h_c, h_p])
+    x_c, x_p, rec = x_c.data, x_p.data, rec.data
+    to_plot = []
+    row_sz = 5
+    nplot = 20
+    for i in range(0, nplot-row_sz, row_sz):
+        row = [[xc, xp, xr] for xc, xp, xr in zip(x_c[i:i+row_sz], x_p[i:i+row_sz], rec[i:i+row_sz])]
+        to_plot.append(list(itertools.chain(*row)))
+
+    img = tensor_seq_to_img(to_plot)
+    return img
+
+
+def plot_analogy(pose, models, x, channels, image_width, max_step):
+    netEC, netEP, netD, _ = models
+    if pose:
+        x, p = x
+    x_c = x[0]
+
+    h_c = netEC(x_c)
+    nrow = 10
+    row_sz = max_step
+    to_plot = []
+    row = [xi[0].data for xi in x]  # first batch every frame
+    zeros = torch.zeros(channels, image_width, image_width)
+    to_plot.append([zeros] + row)
+    for i in range(nrow):
+        to_plot.append([x[0][i].data])  # first frame every batch
+
+    for j in range(0, row_sz):
+        if pose:
+            h_p = p[j].unsqueeze(2).unsqueeze(3)
+        else:
+            h_p = netEP(x[j])
+        for i in range(nrow):
+            h_p[i] = h_p[0]
+        rec = netD([h_c, Variable(h_p)])
+        for i in range(nrow):
+            to_plot[i+1].append(rec[i].data.clone())
+
+    img = tensor_seq_to_img(to_plot)
+    return img
+
+
+def plot_reconstr(pose: bool, models: Tuple[torch.nn.Module],
+                   original: torch.tensor, content: torch.tensor, num_frame=10, repeat_cont=True):
+    """
+    pose True:
+        x, x_c: ((T, 1, C, H, W), (T, 1, 35))
+    pose False:
+        x, x_c: (T, 1, C, H, W)
+    :param pose: whether we have pretrained pose code
+    :param models: tuple of content encoder, pose encoder, decoder and scence discriminator
+    :param original: original video
+    :param content: content video
+    :param num_frame: maximum frames (i.e. # of columns)
+    :param repeat_cont: whether repeat the same content code
+    :return: (T, 3, H, W)
+    """
+    netEC, netEP, netD, _ = models
+    if pose:
+        original, original_p = original
+        content, _ = content
+        original, original_p = original[:num_frame], original_p[:num_frame]
+        content = content[:num_frame]
+    else:
+        original = original[:num_frame]
+        content = content[:num_frame]
+    _, _, C, H, W = original.shape
+
+    if pose:
+        h_ps = original_p  # (T,1,35)
+    else:
+        h_ps = [netEP(frame) for frame in original]  # T of (1,pose_dim)
+
+    if repeat_cont:
+        h_cs = [netEC(content[0]) for _ in content]
+    else:
+        h_cs = [netEC(frame) for frame in content]
+    rec = [netD([h_c, Variable(h_p)]) for h_c, h_p in zip(h_cs, h_ps)]
+
+    to_plot = [[torch.zeros(C, W, H)] + [frame[0].data for frame in original],
+               [content[0][0].data] + []]
+    img = tensor_seq_to_img(to_plot)
+    return img
+
+
+
+
+
 
