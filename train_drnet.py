@@ -236,7 +236,7 @@ def train_pose(models, optimizers, criterions, x):
     return sim_loss.data.cpu().numpy(), rec_loss.data.cpu().numpy()
 
 
-def train(models, optimizers, criterions, x):
+def train_encoder_decoder(models, optimizers, criterions, x):
     netEC, netEP, netD, netC = models
     optimizerEC, optimizerEP, optimizerD, optimizerC = optimizers
     mse_criterion, bce_criterion = criterions
@@ -348,13 +348,14 @@ def main():
                 epoch_sd_acc += sd_acc
 
                 # train main model
-                sim_loss, rec_loss = train(models, optimizers, criterions, x)
+                sim_loss, rec_loss = train_encoder_decoder(models, optimizers, criterions, x)
                 epoch_sim_loss += sim_loss
                 epoch_rec_loss += rec_loss
 
         # ---- eval phase
         for model in models:
             model.eval()
+
         # plot some stuff
         x = next(test_loader)
         plot_rec(opt, models, x, epoch)
