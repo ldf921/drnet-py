@@ -8,6 +8,7 @@ from torch.autograd import Variable
 import utils
 from tqdm import tqdm
 from typing import Tuple
+import valid
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--lr', default=0.002, type=float, help='learning rate')
@@ -33,6 +34,8 @@ parser.add_argument('--data_threads', type=int, default=5, help='number of paral
 parser.add_argument('--normalize', action='store_true', help='if true, normalize pose vector')
 parser.add_argument('--data_type', default='drnet', help='speed up data loading for drnet training')
 parser.add_argument('--pose', action='store_true', help='use the extracted pose code')
+parser.add_argument('--test', action='store_true', help='test the saved checkpoints')
+parser.add_argument('--checkpoint', default=None, type=str, help='the file name of checkpoint (model.pth)')
 
 opt = None
 
@@ -248,6 +251,18 @@ def main():
         )
 
 
+def test():
+    # load dataset
+    train_loader, test_loader = utils.get_normalized_dataloader(opt)
+    test_loader = iter(test_loader)
+
+    cp = torch.load(os.path.join(opt.log_dir, opt.checkpoint))
+    models = (cp['netEC'], cp['netEP'], cp['netD'], None)
+
+    rec_loss = valid.valid(opt, models, test_loader)
+    print('rec_loss {:.6f}'.format(rec_loss))
+
+
 if __name__ == "__main__":
     # load arguments
     opt = parser.parse_args()
@@ -274,4 +289,7 @@ if __name__ == "__main__":
     torch.manual_seed(opt.seed)
     torch.cuda.manual_seed_all(opt.seed)
 
-    main()
+    if opt.test:
+        test()
+    else:
+        main()
