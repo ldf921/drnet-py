@@ -128,14 +128,14 @@ def is_sequence(arg):
             hasattr(arg, "__iter__")))
 
 
-def image_tensor(inputs, padding=1):
+def image_to_tensor(inputs, padding=1) -> torch.tensor:
     # assert is_sequence(inputs)
     assert len(inputs) > 0
     # print(inputs)
 
     # if this is a list of lists, unpack them all and grid them up
     if is_sequence(inputs[0]) or (hasattr(inputs, "dim") and inputs.dim() > 4):
-        images = [image_tensor(x) for x in inputs]
+        images = [image_to_tensor(x) for x in inputs]
         if images[0].dim() == 3:
             c_dim = images[0].size(0)
             x_dim = images[0].size(1)
@@ -181,20 +181,15 @@ def make_image(tensor):
     tensor = tensor.cpu().clamp(0, 1)
     if tensor.size(0) == 1:
         tensor = tensor.expand(3, tensor.size(1), tensor.size(2))
-    # pdb.set_trace()
     return scipy.misc.toimage(tensor.numpy(),
                               high=255*tensor.max().item(),
                               channel_axis=0)
 
 
-def save_image(filename, tensor):
-    img = make_image(tensor)
-    img.save(filename)
-
-
 def save_tensors_image(filename, inputs, padding=1):
-    images = image_tensor(inputs, padding)
-    return save_image(filename, images)
+    image_tensor = image_to_tensor(inputs, padding)
+    img = make_image(image_tensor)
+    img.save(filename)
 
 
 def prod(l):
