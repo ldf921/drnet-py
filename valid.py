@@ -1,4 +1,5 @@
 import os
+import pickle as pkl
 
 import torch
 from torch import nn
@@ -73,9 +74,9 @@ def tobatch(x):
         return x.unsqueeze(0)
 
 
-def get_data(opt, data, indices=None):
-    if indices is None:
-        indices = data.get_index()
+def get_data(opt, data, indices):
+    indices = indices.split('_')
+    indices = (indices[0], int(indices[1]), int(indices[2]), int(indices[3]))
     x, flist = data.get_sequence_idx(*indices)
     x = tobatch(x)
     x = utils.normalize_data(opt, torch.cuda.FloatTensor, x)
@@ -86,15 +87,27 @@ def save_img(opt, models):
     train_data, test_data = utils.load_data(opt)
     img_root = os.path.join(opt.log_dir, "swap")
     os.makedirs(img_root, exist_ok=True)
-    for i in range(8):
-        x_p, name_p, flist = get_data(opt, test_data)
+    if opt.saveidx is not None:
+        with open(opt.saveidx, 'rb') as fi:
+            indices = pkl.load(fi)
+    else:
+        indices = []
+        for i in range(8):
+            r = {'content' : test_data.get_index(), 'poses' : []}
+            for j in range(5):
+                r['poses'].append(test_data.get_index())
+            indices.append(r)
+    for vid in indices:
+        x_p, name_p, flist = get_data(opt, test_data, vid['content'])
         vid_root = os.path.join(img_root, name_p)
         os.makedirs(vid_root, exist_ok=True)
         with open(os.path.join(vid_root, 'flist.txt'), 'w') as fo:
             for path in flist:
                 fo.write(path + '\n')
-        for j in range(5):
-            x_c, name_c, _ = get_data(opt, test_data)
+        img = utils.plot_reconstr(opt.pose, models, x_p, x_p)
+        img.save(os.path.join(vid_root, name_p + '.png'))
+        for vid_c in vid['poses']:
+            x_c, name_c, _ = get_data(opt, test_data, vid_c)
             img = utils.plot_reconstr(opt.pose, models, x_p, x_c)
             img.save(os.path.join(vid_root, name_c + '.png'))
 

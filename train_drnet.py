@@ -38,6 +38,8 @@ parser.add_argument('--normalize', action='store_true', help='if true, normalize
 parser.add_argument('--data_type', default='drnet', help='speed up data loading for drnet training')
 parser.add_argument('--pose', action='store_true', help='use the extracted pose code')
 parser.add_argument('--test', action='store_true', help='test the saved checkpoints')
+parser.add_argument('--saveimg', action='store_true', help='store_images')
+parser.add_argument('--saveidx', default=None, type=str)
 parser.add_argument('--checkpoint', default=None, type=str, help='the file name of checkpoint (model.pth)')
 
 opt = None
@@ -265,9 +267,11 @@ def test():
     cp = torch.load(os.path.join(opt.log_dir, opt.checkpoint))
     models = (cp['netEC'], cp['netEP'], cp['netD'], None)
 
-    valid.save_img(opt, models)
-    rec_loss = valid.valid(opt, models, test_loader)
-    print('rec_loss {:.6f}'.format(rec_loss))
+    if opt.saveimg:
+        valid.save_img(opt, models)
+    else:
+        rec_loss = valid.valid(opt, models, test_loader)
+        print('rec_loss {:.6f}'.format(rec_loss))
 
 
 if __name__ == "__main__":
