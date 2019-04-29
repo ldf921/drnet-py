@@ -265,6 +265,7 @@ def test():
     cp = torch.load(os.path.join(opt.log_dir, opt.checkpoint))
     models = (cp['netEC'], cp['netEP'], cp['netD'], None)
 
+    valid.save_img(opt, models)
     rec_loss = valid.valid(opt, models, test_loader)
     print('rec_loss {:.6f}'.format(rec_loss))
 

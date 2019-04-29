@@ -1,6 +1,10 @@
+import os
+
 import torch
 from torch import nn
 from tqdm import tqdm
+
+import utils
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -60,4 +64,37 @@ def valid(opt, models, test_loader):
         rec_loss_avg.update(rec_loss.item(), 1)
     return rec_loss_avg.avg
 
+
+def tobatch(x):
+    if isinstance(x, tuple):
+        x, p = x
+        return [x.unsqueeze(0), p.unsqueeze(0)]
+    else:
+        return x.unsqueeze(0)
+
+
+def get_data(opt, data, indices=None):
+    if indices is None:
+        indices = data.get_index()
+    x, flist = data.get_sequence_idx(*indices)
+    x = tobatch(x)
+    x = utils.normalize_data(opt, torch.cuda.FloatTensor, x)
+    name = '_'.join(list(map(str, indices)))
+    return x, name, flist
+
+def save_img(opt, models):
+    train_data, test_data = utils.load_data(opt)
+    img_root = os.path.join(opt.log_dir, "swap")
+    os.makedirs(img_root, exist_ok=True)
+    for i in range(8):
+        x_p, name_p, flist = get_data(opt, test_data)
+        vid_root = os.path.join(img_root, name_p)
+        os.makedirs(vid_root, exist_ok=True)
+        with open(os.path.join(vid_root, 'flist.txt'), 'w') as fo:
+            for path in flist:
+                fo.write(path + '\n')
+        for j in range(5):
+            x_c, name_c, _ = get_data(opt, test_data)
+            img = utils.plot_reconstr(opt.pose, models, x_p, x_c)
+            img.save(os.path.join(vid_root, name_c + '.png'))
 
