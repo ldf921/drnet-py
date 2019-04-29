@@ -326,9 +326,9 @@ def plot_reconstr(pose: bool, models: Tuple[torch.nn.Module],
                    original: torch.tensor, content: torch.tensor, num_frame=10, repeat_cont=True):
     """
     pose True:
-        x, x_c: ((T, 1, C, H, W), (T, 1, 35))
+        x, x_c: (T of [1, C, H, W], T of [1, 35]) or ([T, 1, C, H, W], [T, 1, 35])
     pose False:
-        x, x_c: (T, 1, C, H, W)
+        x, x_c: T of [1, C, H, W] or [T, 1, C, H, W]
     :param pose: whether we have pretrained pose code
     :param models: tuple of content encoder, pose encoder, decoder and scence discriminator
     :param original: original video
