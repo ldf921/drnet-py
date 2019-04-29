@@ -346,21 +346,21 @@ def plot_reconstr(pose: bool, models: Tuple[torch.nn.Module],
     else:
         original = original[:num_frame]
         content = content[:num_frame]
-    _, _, C, H, W = original.shape
+    _, C, H, W = original[0].shape
 
     if pose:
-        h_ps = original_p  # (T,1,35)
+        h_ps = [frame.unsqueeze(2).unsqueeze(3) for frame in original_p]  # T of (1, pose_dim, 1, 1)
     else:
-        h_ps = [netEP(frame) for frame in original]  # T of (1,pose_dim)
+        h_ps = [netEP(frame) for frame in original]  # T of (1, pose_dim, 1, 1)
 
     if repeat_cont:
         h_cs = [netEC(content[0]) for _ in content]
     else:
         h_cs = [netEC(frame) for frame in content]
-    rec = [netD([h_c, Variable(h_p)]) for h_c, h_p in zip(h_cs, h_ps)]
+    recs = [netD([h_c, Variable(h_p)]) for h_c, h_p in zip(h_cs, h_ps)]  # T of (1, C, H, W)
 
     to_plot = [[torch.zeros(C, W, H)] + [frame[0].data for frame in original],
-               [content[0][0].data] + []]
+               [content[0][0].data] + [rec[0 ].clone().data for rec in recs]]
     img = tensor_seq_to_img(to_plot)
     return img
 
