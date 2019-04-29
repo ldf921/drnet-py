@@ -4,13 +4,12 @@ import numpy as np
 import socket
 import torch
 from scipy import misc
-# from torch.utils.serialization import load_lua
 import pickle
 
 class KTH(object):
 
     def __init__(self, train, data_root, seq_len = 20, image_size=64, data_type='drnet', pose=False):
-        self.data_root = '%s/KTH/processed/' % data_root
+        self.data_root = os.path.join(data_root, "KTH", "processed")
         self.seq_len = seq_len
         self.data_type = data_type
         self.image_size = image_size
@@ -35,7 +34,8 @@ class KTH(object):
         else:
             meta_file = 'meta'
         for c in self.classes:
-            with open('%s/%s/%s_%s%dx%d.pkl' % (self.data_root, c, data_type, meta_file, image_size, image_size), 'rb') as fi:
+            filename = os.path.join(self.data_root, c, f"{data_type}_{meta_file}{image_size}x{image_size}.pkl")
+            with open(filename, 'rb') as fi:
                 self.data[c] = pickle.load(fi)
 
 
