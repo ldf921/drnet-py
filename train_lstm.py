@@ -150,8 +150,9 @@ def plot_gen(x, epoch):
         for t in range(opt.n_past+opt.n_future):
             row.append(gen_seq[t][i]) 
         to_plot.append(row)
-    fname = '%s/gen/gen_%d.png' % (opt.log_dir, epoch) 
-    utils.save_tensors_image(fname, to_plot)
+    f_name = '%s/gen/gen_%d.png' % (opt.log_dir, epoch)
+    img = utils.tensor_seq_to_img(to_plot)
+    img.save(f_name)
 
 
 def plot_rec(x, epoch):
@@ -187,10 +188,12 @@ def plot_rec(x, epoch):
         for t in range(opt.n_past+opt.n_future):
             row.append(gen_seq[t][i]) 
         to_plot.append(row)
-    fname = '%s/gen/rec_%d.png' % (opt.log_dir, epoch) 
-    utils.save_tensors_image(fname, to_plot)
+    f_name = '%s/gen/rec_%d.png' % (opt.log_dir, epoch)
+    img = utils.tensor_seq_to_img(to_plot)
+    img.save(f_name)
 
-# --------- training funtions ------------------------------------
+
+# --------- training functions ------------------------------------
 def train(x):
     lstm.zero_grad()
 

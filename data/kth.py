@@ -41,6 +41,39 @@ class KTH(object):
 
         self.seed_set = False
 
+    def get_index(self):
+        t = self.seq_len
+        while True: # skip seqeunces that are too short
+            c_idx = np.random.randint(len(self.classes))
+            c = self.classes[c_idx]
+            vid_idx = np.random.randint(len(self.data[c]))
+            vid = self.data[c][vid_idx]
+            seq_idx = np.random.randint(len(vid['files']))
+            if len(vid['files'][seq_idx]) - t >= 0:
+                break
+        st = random.randint(0, len(vid['files'][seq_idx])-t)
+        return c, vid_idx, seq_idx, st
+
+    def get_sequence_idx(self, c, vid_idx, seq_idx, st):
+        t = self.seq_len
+        vid = self.data[c][vid_idx]
+        dname = '%s/%s/%s' % (self.data_root, c, vid['vid'])
+        seq = []
+        pose = []
+        flist = []
+        for i in range(st, st+t):
+            fname = '%s/%s' % (dname, vid['files'][seq_idx][i])
+            im = misc.imread(fname)/255.
+            seq.append(im)
+            if self.pose:
+                pose.append(self.get_pose_code(vid['poses'][seq_idx][i]))
+            flist.append(fname.replace(self.data_root + '/', ''))
+        if self.pose:
+            ret = np.array(seq), np.stack(pose)
+        else:
+            ret = np.array(seq)
+        return self.totensor(ret), flist
+
     def get_sequence(self):
         t = self.seq_len
         while True: # skip seqeunces that are too short
@@ -124,6 +157,5 @@ class KTH(object):
             raise ValueError('Unknown data type: %d. Valid type: drnet | sequence.' % self.data_type)
 
     def __len__(self):
-        return 1000
         return len(self.dirs)*36*5 # arbitrary
 
