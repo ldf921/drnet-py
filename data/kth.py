@@ -124,6 +124,5 @@ class KTH(object):
             raise ValueError('Unknown data type: %d. Valid type: drnet | sequence.' % self.data_type)
 
     def __len__(self):
-        return 1000
         return len(self.dirs)*36*5 # arbitrary
 
