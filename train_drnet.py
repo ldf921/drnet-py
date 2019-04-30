@@ -7,7 +7,7 @@ import random
 from torch.autograd import Variable
 import utils
 import itertools
-import progressbar
+# import progressbar
 from shutil import copyfile
 from tqdm import tqdm
 from typing import Tuple
@@ -288,7 +288,8 @@ if __name__ == "__main__":
             f"normalize={opt.normalize}-"
             f"pose={int(opt.pose)}"
             )
-    opt.log_dir = os.path.join(opt.log_dir, f"{opt.dataset}{opt.image_width}x{opt.image_width}", name)
+    if len(opt.log_dir.split('/')) < 2:
+        opt.log_dir = os.path.join(opt.log_dir, f"{opt.dataset}{opt.image_width}x{opt.image_width}", name)
     os.makedirs(os.path.join(opt.log_dir, "rec"), exist_ok=True)
     os.makedirs(os.path.join(opt.log_dir, "analogy"), exist_ok=True)
 

@@ -75,8 +75,9 @@ def tobatch(x):
 
 
 def get_data(opt, data, indices):
-    indices = indices.split('_')
-    indices = (indices[0], int(indices[1]), int(indices[2]), int(indices[3]))
+    if not isinstance(indices, tuple):
+        indices = indices.split('_')
+        indices = (indices[0], int(indices[1]), int(indices[2]), int(indices[3]))
     x, flist = data.get_sequence_idx(*indices)
     x = tobatch(x)
     x = utils.normalize_data(opt, torch.cuda.FloatTensor, x)
@@ -85,18 +86,25 @@ def get_data(opt, data, indices):
 
 def save_img(opt, models):
     train_data, test_data = utils.load_data(opt)
-    img_root = os.path.join(opt.log_dir, "swap")
+    if True:
+        test_data = train_data
+        img_root = os.path.join(opt.log_dir, "swap-train")
+        print('train')
+    else:
+        img_root = os.path.join(opt.log_dir, "swap")
     os.makedirs(img_root, exist_ok=True)
     if opt.saveidx is not None:
         with open(opt.saveidx, 'rb') as fi:
             indices = pkl.load(fi)
     else:
         indices = []
-        for i in range(8):
+        for i in range(40):
             r = {'content' : test_data.get_index(), 'poses' : []}
             for j in range(5):
                 r['poses'].append(test_data.get_index())
             indices.append(r)
+        with open(os.path.join(opt.log_dir, 'index-train.pkl'), 'wb') as fo:
+            pkl.dump(indices, fo)
     for vid in indices:
         x_p, name_p, flist = get_data(opt, test_data, vid['content'])
         vid_root = os.path.join(img_root, name_p)

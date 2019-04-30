@@ -141,7 +141,7 @@ class KTH(object):
         if isinstance(tensor, tuple):
             return tuple([torch.from_numpy(t) for t in tensor])
         else:
-            return torch.from_numpy(t)
+            return torch.from_numpy(tensor)
 
     def __getitem__(self, index):
         if not self.seed_set:
