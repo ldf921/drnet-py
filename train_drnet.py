@@ -22,7 +22,7 @@ parser.add_argument('--data_root', default='', help='root directory for data')
 parser.add_argument('--optimizer', default='adam', help='optimizer to train with')
 parser.add_argument('--niter', type=int, default=200, help='number of epochs to train for')
 parser.add_argument('--seed', default=1, type=int, help='manual seed')
-parser.add_argument('--epoch_size', type=int, default=600, help='epoch size')
+parser.add_argument('--epoch_size', type=int, default=600 * 100, help='number of samples per epoch')
 parser.add_argument('--content_dim', type=int, default=128, help='size of the content vector')
 parser.add_argument('--pose_dim', type=int, default=10, help='size of the pose vector')
 parser.add_argument('--image_width', type=int, default=128, help='the height / width of the input image to network')
@@ -41,6 +41,7 @@ parser.add_argument('--test', action='store_true', help='test the saved checkpoi
 parser.add_argument('--saveimg', action='store_true', help='store_images')
 parser.add_argument('--saveidx', default=None, type=str)
 parser.add_argument('--checkpoint', default=None, type=str, help='the file name of checkpoint (model.pth)')
+parser.add_argument('--swap_loss', default=None, type=str)
 
 opt = None
 
@@ -87,7 +88,9 @@ def train_pose(models, optimizers, criterions, x):
     h_p1 = h_p1.unsqueeze(2).unsqueeze(3)
 
     h_c1 = netEC(x_c1)
-    h_c2 = netEC(x_c2)[0].detach() if opt.content_model[-4:] == 'unet' else netEC(x_c2).detach() # used as target for sim loss
+    with torch.no_grad():
+        h_c2f = netEC(x_c2)
+        h_c2 = h_c2f[0] if opt.content_model[-4:] == 'unet' else h_c2f  # used as target for sim loss
 
     # similarity loss: ||h_c1 - h_c2||
     sim_loss = mse_criterion(h_c1[0] if opt.content_model[-4:] == 'unet' else h_c1, h_c2)
@@ -105,10 +108,27 @@ def train_pose(models, optimizers, criterions, x):
     # loss = sim_loss + rec_loss + opt.sd_weight*sd_loss
     loss = sim_loss + rec_loss
     loss.backward()
-
     optimizerEC.step()
     optimizerEP.step()
     optimizerD.step()
+
+    if opt.swap_loss is not None:
+        ''' reconstruct using another pose code
+        '''
+        with torch.no_grad():
+            h_c2 = netEC(x_c2)
+        h_p2 = h_p2.flip(dims=[0]).unsqueeze(2).unsqueeze(3)
+        swap_rec = netD([h_c2, h_p2])
+        h_c2_swap = netEC(swap_rec)
+        swap_rec_loss = mse_criterion(h_c2_swap[0], h_c2[0])
+
+        optimizerD.zero_grad()
+        if opt.swap_loss == 'content':
+            swap_rec_loss.backward()
+        else:
+            raise NotImplementedError
+        optimizerD.step()
+
 
     return sim_loss.data.cpu().numpy(), rec_loss.data.cpu().numpy()
 
@@ -183,12 +203,10 @@ def train_scene_discriminator(models, optimizers, criterions, x):
     acc = out[:half].gt(0.5).sum() + out[half:].le(0.5).sum()
     return bce.data.cpu().numpy(), acc.data.cpu().numpy()/opt.batch_size
 
-
 # --------- training loop ------------------------------------
 def main():
     # load dataset
     train_loader, test_loader = utils.get_normalized_dataloader(opt)
-    test_loader = iter(test_loader)
 
     # get networks, criterions and optimizers
     netEC, netEP, netD, netC = utils.get_initialized_network(opt)
@@ -240,7 +258,7 @@ def main():
         for model in models:
             model.eval()
 
-        x = next(test_loader)
+        x = next(iter(test_loader))
         img = utils.plot_rec(opt.pose, models, x, opt.max_step)
         f_name = '%s/rec/%d.png' % (opt.log_dir, epoch)
         img.save(f_name)
@@ -288,6 +306,8 @@ if __name__ == "__main__":
             f"normalize={opt.normalize}-"
             f"pose={int(opt.pose)}"
             )
+    if opt.swap_loss is not None:
+        name += f'-swap_loss={opt.swap_loss}'
     if len(opt.log_dir.split('/')) < 2:
         opt.log_dir = os.path.join(opt.log_dir, f"{opt.dataset}{opt.image_width}x{opt.image_width}", name)
     os.makedirs(os.path.join(opt.log_dir, "rec"), exist_ok=True)

@@ -100,6 +100,7 @@ def load_data(opt):
     elif opt.dataset == 'kth':
         train_data = KTH(
                 train=True,
+                epoch_samples=opt.epoch_size,
                 pose=opt.pose,
                 data_root=opt.data_root,
                 seq_len=opt.max_step,
@@ -107,6 +108,7 @@ def load_data(opt):
                 data_type=opt.data_type)
         test_data = KTH(
                 train=False,
+                epoch_samples=opt.epoch_size,
                 pose=opt.pose,
                 data_root=opt.data_root,
                 seq_len=opt.max_step,
@@ -129,6 +131,7 @@ def get_dataloader(opt):
                              shuffle=False,
                              drop_last=True,
                              pin_memory=True)
+    print(len(train_data), len(test_data), len(train_loader), len(test_loader))
     return train_loader, test_loader
 
 

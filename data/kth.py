@@ -8,7 +8,7 @@ import pickle
 
 class KTH(object):
 
-    def __init__(self, train, data_root, seq_len = 20, image_size=64, data_type='drnet', pose=False):
+    def __init__(self, train, data_root, epoch_samples, seq_len = 20, image_size=64, data_type='drnet', pose=False):
         self.data_root = os.path.join(data_root, "KTH", "processed")
         self.seq_len = seq_len
         self.data_type = data_type
@@ -40,6 +40,7 @@ class KTH(object):
 
 
         self.seed_set = False
+        self.epoch_samples = epoch_samples
 
     def get_index(self):
         t = self.seq_len
@@ -157,5 +158,5 @@ class KTH(object):
             raise ValueError('Unknown data type: %d. Valid type: drnet | sequence.' % self.data_type)
 
     def __len__(self):
-        return len(self.dirs)*36*5 # arbitrary
+        return self.epoch_samples
 
