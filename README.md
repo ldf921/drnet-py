@@ -16,4 +16,6 @@ I will be most responsive regarding questions about the code if you email me at 
 
 ```
 python train_drnet.py --dataset kth --data_root ../datasets --image_width 128
+python train_drnet.py --dataset kth --data_root ../datasets --image_width 128 --pose --pose_dim 35 --swap_loss content
 ```
+

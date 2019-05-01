@@ -1,3 +1,5 @@
+from collections import OrderedDict
+
 import torch
 import torch.optim as optim
 import torch.nn as nn
@@ -11,7 +13,10 @@ import itertools
 from shutil import copyfile
 from tqdm import tqdm
 from typing import Tuple
+
 import valid
+from metrics import Summary
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--lr', default=0.002, type=float, help='learning rate')
@@ -112,6 +117,10 @@ def train_pose(models, optimizers, criterions, x):
     optimizerEP.step()
     optimizerD.step()
 
+    ret = OrderedDict()
+    ret['sim_loss'] = sim_loss
+    ret['rec_loss'] = rec_loss
+
     if opt.swap_loss is not None:
         ''' reconstruct using another pose code
         '''
@@ -125,12 +134,12 @@ def train_pose(models, optimizers, criterions, x):
         optimizerD.zero_grad()
         if opt.swap_loss == 'content':
             swap_rec_loss.backward()
+            ret['swap_loss'] = swap_rec_loss
         else:
             raise NotImplementedError
         optimizerD.step()
 
-
-    return sim_loss.data.cpu().numpy(), rec_loss.data.cpu().numpy()
+    return ret
 
 
 def train_encoder_decoder(models, optimizers, criterions, x):
@@ -231,12 +240,11 @@ def main():
 
         epoch_sim_loss, epoch_rec_loss, epoch_sd_loss, epoch_sd_acc = 0, 0, 0, 0
 
+        summary = Summary()
         for batch_idx, x in tqdm(enumerate(train_loader)):
             # train scene discriminator
             if opt.pose:
-                sim_loss, rec_loss = train_pose(models, optimizers, criterions, x)
-                epoch_sim_loss += sim_loss
-                epoch_rec_loss += rec_loss
+                summary.update(train_pose(models, optimizers, criterions, x))
             else:
                 sd_loss, sd_acc = train_scene_discriminator(models, optimizers, criterions, x)
                 epoch_sd_loss += sd_loss
@@ -247,12 +255,15 @@ def main():
                 epoch_sim_loss += sim_loss
                 epoch_rec_loss += rec_loss
 
-        epoch_rec_loss = epoch_rec_loss/len(train_loader)
-        epoch_sim_loss = epoch_sim_loss/len(train_loader)
-        epoch_sd_acc = 100 * epoch_sd_acc/len(train_loader)
-        ttl_samples = epoch * len(train_loader) * opt.batch_size
-        print(f"{epoch: 02d} rec loss:{epoch_rec_loss:.4f} | sim loss: {epoch_sim_loss:.4f} | "
-              f"scene disc acc: {epoch_sd_acc:.3f}% ({ttl_samples})")
+        if opt.pose:
+            print(f"[Epoch {epoch:03d}] {summary.format()}")
+        else:
+            epoch_rec_loss = epoch_rec_loss/len(train_loader)
+            epoch_sim_loss = epoch_sim_loss/len(train_loader)
+            epoch_sd_acc = 100 * epoch_sd_acc/len(train_loader)
+            ttl_samples = epoch * len(train_loader) * opt.batch_size
+            print(f"{epoch: 02d} rec loss:{epoch_rec_loss:.4f} | sim loss: {epoch_sim_loss:.4f} | "
+                  f"scene disc acc: {epoch_sd_acc:.3f}% ({ttl_samples})")
 
         # ---- eval phase
         for model in models:
