@@ -86,7 +86,7 @@ def get_data(opt, data, indices):
 
 def save_img(opt, models):
     train_data, test_data = utils.load_data(opt)
-    if True:
+    if 'train' in opt.saveidx:
         test_data = train_data
         img_root = os.path.join(opt.log_dir, "swap-train")
         print('train')

@@ -16,6 +16,7 @@ from typing import Tuple
 
 import valid
 from metrics import Summary
+from models.gan import DRGAN
 
 
 parser = argparse.ArgumentParser()
@@ -212,14 +213,24 @@ def train_scene_discriminator(models, optimizers, criterions, x):
     acc = out[:half].gt(0.5).sum() + out[half:].le(0.5).sum()
     return bce.data.cpu().numpy(), acc.data.cpu().numpy()/opt.batch_size
 
+def print_log(msg, f):
+    print(msg)
+    print(msg, file = f)
+    f.flush()
+
 # --------- training loop ------------------------------------
 def main():
     # load dataset
     train_loader, test_loader = utils.get_normalized_dataloader(opt)
 
     # get networks, criterions and optimizers
-    netEC, netEP, netD, netC = utils.get_initialized_network(opt)
-    models = (netEC, netEP, netD, netC)
+    if opt.swap_loss == 'gan':
+        models = DRGAN(opt)
+        using_framework = True
+    else:
+        netEC, netEP, netD, netC = utils.get_initialized_network(opt)
+        models = (netEC, netEP, netD, netC)
+        using_framework = False
     for model in models:
         model.cuda()
 
@@ -230,62 +241,70 @@ def main():
         criterion.cuda()
 
     # optimizer should be constructed after moving net to the device
-    optimizerEC, optimizerEP, optimizerD, optimizerC = get_optimizers(opt, models)
-    optimizers = (optimizerEC, optimizerEP, optimizerD, optimizerC)
+    if not using_framework:
+        optimizerEC, optimizerEP, optimizerD, optimizerC = get_optimizers(opt, models)
+        optimizers = (optimizerEC, optimizerEP, optimizerD, optimizerC)
 
-    for epoch in range(opt.niter):
-        # ---- train phase
-        for model in models:
-            model.train()
+    with open(os.path.join(opt.log_dir, 'log'), 'a') as fo:
+        for epoch in range(opt.niter):
+            # ---- train phase
+            for model in models:
+                model.train()
 
-        epoch_sim_loss, epoch_rec_loss, epoch_sd_loss, epoch_sd_acc = 0, 0, 0, 0
+            epoch_sim_loss, epoch_rec_loss, epoch_sd_loss, epoch_sd_acc = 0, 0, 0, 0
 
-        summary = Summary()
-        for batch_idx, x in tqdm(enumerate(train_loader)):
-            # train scene discriminator
+            summary = Summary()
+            for batch_idx, x in tqdm(enumerate(train_loader)):
+                # train scene discriminator
+                if using_framework:
+                    summary.update(models.train(criterions, x))
+                elif opt.pose:
+                    summary.update(train_pose(models, optimizers, criterions, x))
+                else:
+                    sd_loss, sd_acc = train_scene_discriminator(models, optimizers, criterions, x)
+                    epoch_sd_loss += sd_loss
+                    epoch_sd_acc += sd_acc
+
+                    # train main model
+                    sim_loss, rec_loss = train_encoder_decoder(models, optimizers, criterions, x)
+                    epoch_sim_loss += sim_loss
+                    epoch_rec_loss += rec_loss
+
             if opt.pose:
-                summary.update(train_pose(models, optimizers, criterions, x))
+                print_log(f"[Epoch {epoch:03d}] {summary.format()}", fo)
             else:
-                sd_loss, sd_acc = train_scene_discriminator(models, optimizers, criterions, x)
-                epoch_sd_loss += sd_loss
-                epoch_sd_acc += sd_acc
+                epoch_rec_loss = epoch_rec_loss/len(train_loader)
+                epoch_sim_loss = epoch_sim_loss/len(train_loader)
+                epoch_sd_acc = 100 * epoch_sd_acc/len(train_loader)
+                ttl_samples = epoch * len(train_loader) * opt.batch_size
+                print_log(f"{epoch: 02d} rec loss:{epoch_rec_loss:.4f} | sim loss: {epoch_sim_loss:.4f} | "
+                      f"scene disc acc: {epoch_sd_acc:.3f}% ({ttl_samples})", fo)
 
-                # train main model
-                sim_loss, rec_loss = train_encoder_decoder(models, optimizers, criterions, x)
-                epoch_sim_loss += sim_loss
-                epoch_rec_loss += rec_loss
+            # ---- eval phase
+            for model in models:
+                model.eval()
 
-        if opt.pose:
-            print(f"[Epoch {epoch:03d}] {summary.format()}")
-        else:
-            epoch_rec_loss = epoch_rec_loss/len(train_loader)
-            epoch_sim_loss = epoch_sim_loss/len(train_loader)
-            epoch_sd_acc = 100 * epoch_sd_acc/len(train_loader)
-            ttl_samples = epoch * len(train_loader) * opt.batch_size
-            print(f"{epoch: 02d} rec loss:{epoch_rec_loss:.4f} | sim loss: {epoch_sim_loss:.4f} | "
-                  f"scene disc acc: {epoch_sd_acc:.3f}% ({ttl_samples})")
+            x = next(iter(test_loader))
+            img = utils.plot_rec(opt.pose, models, x, opt.max_step)
+            f_name = '%s/rec/%d.png' % (opt.log_dir, epoch)
+            img.save(f_name)
 
-        # ---- eval phase
-        for model in models:
-            model.eval()
+            img = utils.plot_analogy(opt.pose, models, x, opt.channels, opt.image_width, opt.max_step)
+            f_name = '%s/analogy/%d.png' % (opt.log_dir, epoch)
+            img.save(f_name)
 
-        x = next(iter(test_loader))
-        img = utils.plot_rec(opt.pose, models, x, opt.max_step)
-        f_name = '%s/rec/%d.png' % (opt.log_dir, epoch)
-        img.save(f_name)
+            # save the model
+            cp_path = f"{opt.log_dir}/model.pth"
+            if using_framework:
+                models.save(cp_path)
+            else:
+                torch.save(
+                    {'netD': netD, 'netEP': netEP, 'netEC': netEC, 'opt': opt},
+                    cp_path
+                )
 
-        img = utils.plot_analogy(opt.pose, models, x, opt.channels, opt.image_width, opt.max_step)
-        f_name = '%s/analogy/%d.png' % (opt.log_dir, epoch)
-        img.save(f_name)
-
-        # save the model
-        torch.save(
-            {'netD': netD, 'netEP': netEP, 'netEC': netEC, 'opt': opt},
-            f"{opt.log_dir}/model.pth"
-        )
-
-        if epoch % 15 == 0:
-            copyfile('%s/model.pth' % opt.log_dir, '%s/model-%d.pth' % (opt.log_dir, epoch))
+            if epoch % 15 == 0:
+                copyfile('%s/model.pth' % opt.log_dir, '%s/model-%d.pth' % (opt.log_dir, epoch))
 
 
 def test():

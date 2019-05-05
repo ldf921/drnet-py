@@ -1,6 +1,7 @@
 import torch
 import itertools
 from torch import nn as nn
+from torch import optim
 import numpy as np
 import scipy.misc
 import functools
@@ -11,6 +12,22 @@ from typing import Tuple
 from data.moving_mnist import MovingMNIST
 from data.kth import KTH
 from data import suncg
+
+
+def get_optimizer(opt, model: nn.Module) -> optim.Optimizer:
+    """
+    :return: get a optimizer for each of the network with optimizer type, learning rate, and beta1 set as in `opt`
+    """
+    if opt.optimizer == 'adam':
+        optimizer = optim.Adam
+    elif opt.optimizer == 'rmsprop':
+        optimizer = optim.RMSprop
+    elif opt.optimizer == 'sgd':
+        optimizer = optim.SGD
+    else:
+        raise ValueError('Unknown optimizer: %s' % opt.optimizer)
+
+    return optimizer(model.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
 
 
 def get_initialized_network(opt) -> Tuple[nn.Module]:
@@ -265,7 +282,11 @@ def init_weights(m):
 
 # --------- plotting functions ------------------------------------
 def plot_rec(pose, models, x, max_step):
-    netEC, netEP, netD, _ = models
+    try:
+        netEC, netEP, netD, _ = models
+    except:
+        netEC = models.netEC
+        netD = models.netD
     if pose:
         x, p = x
         x_c = x[0]
@@ -295,7 +316,11 @@ def plot_rec(pose, models, x, max_step):
 
 
 def plot_analogy(pose, models, x, channels, image_width, max_step):
-    netEC, netEP, netD, _ = models
+    try:
+        netEC, netEP, netD, _ = models
+    except:
+        netEC = models.netEC
+        netD = models.netD
     if pose:
         x, p = x
     x_c = x[0]
