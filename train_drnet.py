@@ -7,15 +7,13 @@ import argparse
 import os
 import random
 from torch.autograd import Variable
-import utils
-import itertools
-# import progressbar
 from shutil import copyfile
 from tqdm import tqdm
 from typing import Tuple
 
 import valid
-from metrics import Summary
+from utils import utils
+from utils.metrics import Summary
 from models.gan import DRGAN
 
 
