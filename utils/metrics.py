@@ -23,12 +23,15 @@ class AverageMeter(object):
 
 
 class Summary:
+    """
+    Automatically keeps a dictionary of named metric values
+    """
     def __init__(self):
         self.dict = OrderedDict()
 
     def update(self, metrics, n=1):
         for k, v in metrics.items():
-            meter = self.dict.setdefault(k, AverageMeter())
+            meter = self.dict.setdefault(k, AverageMeter())  # set a new meter if no meter found
             meter.update(v.item(), n=n)
 
     def format(self):

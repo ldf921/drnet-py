@@ -3,12 +3,14 @@ from collections import OrderedDict
 import torch
 from torch import nn
 
-import utils
+from utils import utils
 from .discriminator import Discriminator
 
 
-class DRGAN:
+class DrGan(object):
     def __init__(self, opt):
+        assert opt.pose, "most use pose code"
+        assert opt.swap_loss == "gan", "only gan swap loss implemented"
         self.opt = opt
         self.netEC, _, self.netD, _ = utils.get_initialized_network(opt)
         self.netR = Discriminator(3, 64)
@@ -17,10 +19,22 @@ class DRGAN:
         self.build_optimizer()
 
     def named_modules(self):
-        return [ (name, getattr(self, name)) for name in self._modules]
+        return [(name, getattr(self, name)) for name in self._modules]
 
     def modules(self):
-        return map(lambda name : getattr(self, name), self._modules)
+        return map(lambda name: getattr(self, name), self._modules)
+
+    def cuda(self):
+        for module in self.modules():
+            module.cuda()
+
+    def train(self):
+        for module in self.modules():
+            module.train()
+
+    def eval(self):
+        for module in self.modules():
+            module.eval()
 
     def __iter__(self):
         return self.modules()
@@ -33,15 +47,16 @@ class DRGAN:
     def save(self, cp_path):
         torch.save(dict(self.named_modules()), cp_path)
 
-    def train(self, criterions, x):
+    def train_gan(self, criterions, x):
         opt = self.opt
         mse_criterion, bce_criterion = criterions
+        ret = OrderedDict()
 
         x, p = x
 
         b = x[0].size(0)
-        x = [t.split(b // 2, dim = 0) for t in x]
-        p = [t.split(b // 2, dim = 0) for t in p]
+        x = [t.split(b // 2, dim=0) for t in x]
+        p = [t.split(b // 2, dim=0) for t in p]
 
         x_c1 = x[0][0]
         x_c2 = x[1][0]
@@ -56,59 +71,45 @@ class DRGAN:
         with torch.no_grad():
             h_c2f = self.netEC(x_c2)
             h_c2 = h_c2f[0] if opt.content_model[-4:] == 'unet' else h_c2f  # used as target for sim loss
+        rec = self.netD([h_c1, h_p1])
 
         # similarity loss: ||h_c1 - h_c2||
         sim_loss = mse_criterion(h_c1[0] if opt.content_model[-4:] == 'unet' else h_c1, h_c2)
+        ret['sim_loss'] = sim_loss.item()
 
         # reconstruction loss: ||D(h_c1, h_p1), x_p1||
-        rec = self.netD([h_c1, h_p1])
         rec_loss = mse_criterion(rec, x_p1)
+        ret['rec_loss'] = rec_loss.item()
 
-        # scene discriminator loss: maximize entropy of output
-        # target = torch.cuda.FloatTensor(opt.batch_size, 1).fill_(0.5)
-        # out = self.netC([h_p1, h_p2])
-        # sd_loss = bce_criterion(out, Variable(target))
-
-        # full loss
-        # loss = sim_loss + rec_loss + opt.sd_weight*sd_loss
+        # sum of similarity loss and reconstruction loss
         loss = sim_loss + rec_loss
 
-        ret = OrderedDict()
-        ret['sim_loss'] = sim_loss
-        ret['rec_loss'] = rec_loss
+        # reconstruct using another pose code
+        x_c2 = x[0][1]
+        h_p2 = p[1][1]
+        h_p2 = h_p2.flip(dims=[0]).unsqueeze(2).unsqueeze(3)
+        h_c2 = self.netEC(x_c2)
+        swap_rec = self.netD([h_c2, h_p2])
 
-        if opt.swap_loss == 'gan':
-            ''' reconstruct using another pose code
-            '''
-            x_c2 = x[0][1]
-            h_p2 = p[1][1]
-            h_p2 = h_p2.flip(dims=[0]).unsqueeze(2).unsqueeze(3)
+        # gan loss (generator part): - log(D(G(z))) as alternative to log(1 - D(G(z))) for stability
+        gan_loss = self.gan_loss(self.netR(swap_rec), real=True)
+        ret['gan_loss'] = gan_loss.item()
+        loss = loss + opt.sd_weight * gan_loss
+        self.optimizerEC.zero_grad()
+        self.optimizerD.zero_grad()
+        loss.backward()
+        self.optimizerEC.step()
+        self.optimizerD.step()
 
-            h_c2 = self.netEC(x_c2)
-            swap_rec = self.netD([h_c2, h_p2])
-
-            gan_loss = self.gan_loss(self.netR(swap_rec), real=True)
-            loss = loss + opt.sd_weight * gan_loss
-
-            self.optimizerEC.zero_grad()
-            self.optimizerD.zero_grad()
-            loss.backward()
-            self.optimizerEC.step()
-            self.optimizerD.step()
-
-            dis_loss = (self.gan_loss(self.netR(swap_rec.detach()), real=False) +
-                        self.gan_loss(self.netR(x[2][1]), real=True)) / 2
-            self.optimizerR.zero_grad()
-            dis_loss.backward()
-            self.optimizerR.step()
-
-            ret['gan_loss'] = gan_loss
-            ret['dis_loss'] = dis_loss
-        else:
-            raise NotImplementedError
+        # gan loss (discriminator part): - log(D(x)) - log(1 - D(G(z)))
+        dis_loss = (self.gan_loss(self.netR(swap_rec.detach()), real=False) +
+                    self.gan_loss(self.netR(x[2][1]), real=True)) / 2
+        ret['dis_loss'] = dis_loss.item()
+        self.optimizerR.zero_grad()
+        dis_loss.backward()
+        self.optimizerR.step()
 
         return ret
-
 
     def gan_loss(self, preds, real=True):
         if real:
