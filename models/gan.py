@@ -37,8 +37,6 @@ class DRGAN:
         mse_criterion, bce_criterion = criterions
 
         x, p = x
-        self.netEC.zero_grad()
-        self.netD.zero_grad()
 
         b = x[0].size(0)
         x = [t.split(b // 2, dim = 0) for t in x]
@@ -73,9 +71,6 @@ class DRGAN:
         # full loss
         # loss = sim_loss + rec_loss + opt.sd_weight*sd_loss
         loss = sim_loss + rec_loss
-        loss.backward()
-        self.optimizerEC.step()
-        self.optimizerD.step()
 
         ret = OrderedDict()
         ret['sim_loss'] = sim_loss
@@ -92,15 +87,16 @@ class DRGAN:
             swap_rec = self.netD([h_c2, h_p2])
 
             gan_loss = self.gan_loss(self.netR(swap_rec), real=True)
+            loss = loss + opt.sd_weight * gan_loss
 
             self.optimizerEC.zero_grad()
             self.optimizerD.zero_grad()
-            gan_loss.backward()
+            loss.backward()
             self.optimizerEC.step()
             self.optimizerD.step()
 
             dis_loss = (self.gan_loss(self.netR(swap_rec.detach()), real=False) +
-                        self.gan_loss(self.netR(x[2][1]), real=True)) / 0.5
+                        self.gan_loss(self.netR(x[2][1]), real=True)) / 2
             self.optimizerR.zero_grad()
             dis_loss.backward()
             self.optimizerR.step()
