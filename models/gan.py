@@ -92,6 +92,7 @@ class DRGAN(Model):
 
         return ret
 
+
     def gan_loss(self, preds, real=True):
         if real:
             return nn.BCEWithLogitsLoss()(preds, torch.ones_like(preds))
