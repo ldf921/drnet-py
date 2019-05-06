@@ -5,8 +5,9 @@ from torch import nn
 
 import utils
 from .discriminator import Discriminator
+from .base import Model
 
-class DRGAN:
+class DRGAN(Model):
     def __init__(self, opt):
         self.opt = opt
         self.netEC, _, self.netD, _ = utils.get_initialized_network(opt)
@@ -14,23 +15,6 @@ class DRGAN:
 
         self._modules = ['netEC', 'netD', 'netR']
         self.build_optimizer()
-
-    def named_modules(self):
-        return [ (name, getattr(self, name)) for name in self._modules]
-
-    def modules(self):
-        return map(lambda name : getattr(self, name), self._modules)
-
-    def __iter__(self):
-        return self.modules()
-
-    def build_optimizer(self):
-        for name, module in self.named_modules():
-            optim_name = name.replace('net', 'optimizer')
-            setattr(self, optim_name, utils.get_optimizer(self.opt, module))
-
-    def save(self, cp_path):
-        torch.save(dict(self.named_modules()), cp_path)
 
     def train(self, criterions, x):
         opt = self.opt
