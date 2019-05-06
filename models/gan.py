@@ -6,6 +6,7 @@ from torch import nn
 import utils
 from .discriminator import Discriminator
 
+
 class DRGAN:
     def __init__(self, opt):
         self.opt = opt
@@ -107,6 +108,7 @@ class DRGAN:
             raise NotImplementedError
 
         return ret
+
 
     def gan_loss(self, preds, real=True):
         if real:

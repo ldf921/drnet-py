@@ -90,6 +90,9 @@ class NormalizedDataLoader(DataLoader):
 
 
 def load_data(opt):
+    """
+    :return: raw data
+    """
     if opt.dataset == 'moving_mnist':
         train_data = MovingMNIST(
                 train=True,
@@ -135,6 +138,9 @@ def load_data(opt):
 
 
 def get_dataloader(opt):
+    """
+    :return: construct data loader directly from raw data
+    """
     train_data, test_data = load_data(opt)
     train_loader = DataLoader(train_data,
                               num_workers=opt.data_threads,
@@ -153,6 +159,9 @@ def get_dataloader(opt):
 
 
 def get_normalized_dataloader(opt):
+    """
+    :return: get normalized data from raw data by applying normalizing transformations
+    """
     train_loader, test_loader = get_dataloader(opt)
     train_loader = NormalizedDataLoader(train_loader, opt)
     test_loader = NormalizedDataLoader(test_loader, opt)

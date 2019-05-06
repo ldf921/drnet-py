@@ -310,7 +310,6 @@ def main():
 def test():
     # load dataset
     train_loader, test_loader = utils.get_normalized_dataloader(opt)
-    test_loader = iter(test_loader)
 
     cp = torch.load(os.path.join(opt.log_dir, opt.checkpoint))
     models = (cp['netEC'], cp['netEP'], cp['netD'], None)
@@ -334,10 +333,9 @@ if __name__ == "__main__":
             f"lr={opt.lr:.3f}-"
             f"sd_nf={opt.sd_nf}-"
             f"normalize={opt.normalize}-"
-            f"pose={int(opt.pose)}"
+            f"pose={int(opt.pose)}-"
+            f"swap_loss={opt.swap_loss}"
             )
-    if opt.swap_loss is not None:
-        name += f'-swap_loss={opt.swap_loss}'
     if len(opt.log_dir.split('/')) < 2:
         opt.log_dir = os.path.join(opt.log_dir, f"{opt.dataset}{opt.image_width}x{opt.image_width}", name)
     os.makedirs(os.path.join(opt.log_dir, "rec"), exist_ok=True)

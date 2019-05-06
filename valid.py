@@ -7,10 +7,14 @@ from tqdm import tqdm
 
 import utils
 
+
 class AverageMeter(object):
     """Computes and stores the average and current value"""
     def __init__(self):
-        self.reset()
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
 
     def reset(self):
         self.val = 0
@@ -24,6 +28,7 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
+
 def repeat_feature(tensor, T):
     if isinstance(tensor, tuple):
         return tuple([repeat_feature(t, T) for t in tensor])
@@ -34,10 +39,11 @@ def repeat_feature(tensor, T):
 
 
 def valid_batch(opt, models, x):
-    '''
-        x : [T, B, C, H, W] list of tensor
-        p : [T, B, 35] list of tensor
-    '''
+    """
+    validate a single batch of data using content code only from the first frame
+    x : [T, B, C, H, W] list of tensor
+    p : [T, B, 35] list of tensor
+    """
     netEC, netEP, netD, _ = models
     if opt.pose:
         x, p = x
@@ -59,6 +65,9 @@ def valid_batch(opt, models, x):
 
 
 def valid(opt, models, test_loader):
+    """
+    validate first 1000 batches of the test_loader and return the average reconstruction loss
+    """
     rec_loss_avg = AverageMeter()
     for i, x in tqdm(zip(range(1000), test_loader)):
         rec_loss = valid_batch(opt, models, x)
@@ -83,6 +92,7 @@ def get_data(opt, data, indices):
     x = utils.normalize_data(opt, torch.cuda.FloatTensor, x)
     name = '_'.join(list(map(str, indices)))
     return x, name, flist
+
 
 def save_img(opt, models):
     train_data, test_data = utils.load_data(opt)
