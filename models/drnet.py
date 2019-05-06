@@ -10,13 +10,13 @@ class DrNet(object):
         self.opt = opt
         if self.opt.pose:
             self.netEC, _, self.netD, _ = utils.get_initialized_network(self.opt)
-            self._modules["netEC", "netD"]
+            self._modules = ["netEC", "netD"]
         else:
             self.netEC, self.netEP, self.netD, self.netC = utils.get_initialized_network(self.opt)
             self._modules = ["netEC", "netEP", "netD", "netC"]
 
     def named_modules(self):
-        return [(name, getattr(self, name)) for name in self.modules]
+        return [(name, getattr(self, name)) for name in self._modules]
 
     def modules(self):
         return map(lambda name: getattr(self, name), self._modules)

@@ -32,7 +32,7 @@ class Summary:
     def update(self, metrics, n=1):
         for k, v in metrics.items():
             meter = self.dict.setdefault(k, AverageMeter())  # set a new meter if no meter found
-            meter.update(v.item(), n=n)
+            meter.update(v, n=n)
 
     def format(self):
         msg = ''
