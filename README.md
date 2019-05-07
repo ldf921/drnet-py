@@ -14,8 +14,20 @@ The ```--imageSize``` flag specifiec the image resolution. Experimental results 
 ### fyi
 I will be most responsive regarding questions about the code if you email me at denton@cs.nyu.edu.
 
+## Custom training
+To run with the original setting
 ```
 python train_drnet.py --dataset kth --data_root ../datasets --image_width 128
+```
+
+To use AlphaPose as pose encoder
+```
 python train_drnet.py --dataset kth --data_root ../datasets --image_width 128 --pose --pose_dim 35 --swap_loss content
+```
+
+To use AlphaPose as pose encoder and use GAN loss
+```
+python train_drnet.py --dataset kth --data_root ../datasets --image_width 128 --pose --pose_dim 35 --swap_loss gan
+
 ```
 

@@ -15,35 +15,6 @@ class DrNet(object):
             self.netEC, self.netEP, self.netD, self.netC = utils.get_initialized_network(self.opt)
             self._modules = ["netEC", "netEP", "netD", "netC"]
 
-    def named_modules(self):
-        return [(name, getattr(self, name)) for name in self._modules]
-
-    def modules(self):
-        return map(lambda name: getattr(self, name), self._modules)
-
-    def cuda(self):
-        for module in self.modules():
-            module.cuda()
-
-    def train(self):
-        for module in self.modules():
-            module.train()
-
-    def eval(self):
-        for module in self.modules():
-            module.eval()
-
-    def __iter__(self):
-        return self.modules()
-
-    def build_optimizer(self):
-        for name, module in self.named_modules():
-            optim_name = name.replace("net", "optimizer")
-            setattr(self, optim_name, utils.get_optimizer(self.opt, module))
-
-    def save(self, cp_path):
-        torch.save(dict(self.named_modules()), cp_path)
-
     def train_pose(self, criterions, x):
         """
         :return: sim_loss, rec_loss and swap_loss if specified in the option

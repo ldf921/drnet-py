@@ -73,10 +73,9 @@ def main():
 
             summary = Summary()
             for batch_idx, x in tqdm(enumerate(train_loader)):
-                # train scene discriminator
-                if opt.swap_loss == "gan":
+                if opt.swap_loss == "gan" and opt.pose:
                     summary.update(models.train_gan(criterions, x))
-                if opt.pose:
+                elif opt.pose:
                     summary.update(models.train_pose(criterions, x))
                 else:
                     summary.update(models.train_scene_discriminator(criterions, x))
