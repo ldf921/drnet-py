@@ -292,10 +292,10 @@ def init_weights(m):
 # --------- plotting functions ------------------------------------
 def plot_rec(pose, models, x, max_step):
     try:
-        netEC, netEP, netD, _ = models
-    except:
         netEC = models.netEC
         netD = models.netD
+    except:
+        netEC, netEP, netD, _ = models
     if pose:
         x, p = x
         x_c = x[0]
@@ -326,10 +326,10 @@ def plot_rec(pose, models, x, max_step):
 
 def plot_analogy(pose, models, x, channels, image_width, max_step):
     try:
-        netEC, netEP, netD, _ = models
-    except:
         netEC = models.netEC
         netD = models.netD
+    except:
+        netEC, netEP, netD, _ = models
     if pose:
         x, p = x
     x_c = x[0]

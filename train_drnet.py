@@ -15,6 +15,7 @@ import valid
 from utils import utils
 from utils.metrics import Summary
 from models.gan import DRGAN
+from models.cgan import CGAN
 
 
 parser = argparse.ArgumentParser()
@@ -224,6 +225,9 @@ def main():
     # get networks, criterions and optimizers
     if opt.swap_loss == 'gan':
         models = DRGAN(opt)
+        using_framework = True
+    elif opt.swap_loss == 'cgan':
+        models = CGAN(opt)
         using_framework = True
     else:
         netEC, netEP, netD, netC = utils.get_initialized_network(opt)
