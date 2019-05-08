@@ -43,6 +43,9 @@ class ContentEncoder(nn.Module):
 def triplet_loss(network, x_anchor, x_in, x_out, margin):
     ''' Triplet loss `x_acnhor` and `x_in` are two samples in the same video,
     `x_out` are generated frame
+    Return
+    ==============
+    gan loss, discriminator loss
     '''
     embeded_anchor = network(x_anchor)
     embeded_in = network(x_in)

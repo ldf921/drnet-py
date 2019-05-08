@@ -11,7 +11,7 @@ from utils import utils
 from utils.metrics import Summary
 from models.gan import DrGan
 from models.drnet import DrNet
-from models.cgan import CGan
+from models.cgan import CGan, CGanTriplet
 
 
 parser = argparse.ArgumentParser()
@@ -56,6 +56,8 @@ def main():
         models = DrGan(opt)
     elif opt.swap_loss == 'cgan':
         models = CGan(opt)
+    elif opt.swap_loss == 'cgan-triplet':
+        models = CGanTriplet(opt)
     else:
         models = DrNet(opt)
     models.cuda()

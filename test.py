@@ -14,8 +14,8 @@ from typing import Tuple
 import valid
 from utils import utils
 from utils.metrics import Summary
-from models.gan import DRGAN
-from models.cgan import CGAN, CGANTriplet
+from models.gan import DrGan
+from models.cgan import CGan, CGanTriplet
 
 def random_data(n = 4, b = 1):
     x = [torch.randn(b, 3, 128, 128) for i in range(n)]
@@ -53,5 +53,6 @@ parser.add_argument('--checkpoint', default=None, type=str, help='the file name 
 parser.add_argument('--swap_loss', default=None, type=str)
 
 opt = parser.parse_args()
-model = CGANTriplet(opt)
+model = CGanTriplet(opt)
+model.build_optimizer()
 model.train(random_data(b = 4))

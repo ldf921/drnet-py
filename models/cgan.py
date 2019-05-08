@@ -14,7 +14,7 @@ def to_heatmap(pose, sigma=2):
     b = pose.size(0)
     size = 128
     p = 17
-    identity = torch.Tensor([[[1, 0, 0], [0, 1, 0]]]).float().cuda()
+    identity = torch.Tensor([[[1, 0, 0], [0, 1, 0]]]).float()# .cuda()
     grid = torch.affine_grid_generator(identity.repeat(1, 1, 1), size=[1, 1, size, size])
     grid = grid.repeat(b, p, 1, 1, 1)
     partition = 2 * math.pi * sigma ** 2
@@ -86,15 +86,16 @@ class CGan(Model):
             return nn.BCEWithLogitsLoss()(preds, torch.zeros_like(preds))
 
 
-class CGANTriplet(Model):
+class CGanTriplet(Model):
     def __init__(self, opt):
+        assert opt.pose, "must use pose code"
+        assert opt.swap_loss == "cgan-triplet", "CGan is supposed to use only for cgan swap loss"
         self.opt = opt
         self.netEC, _, self.netD, _ = utils.get_initialized_network(opt)
-        self.netRP = Discriminator(4, 64, in_planes=17 + 3)
+        self.netRP = Discriminator(layers=4, in_planes=17 + 3, first_out_planes=64)
         self.netRC = ContentEncoder()
 
         self._modules = ['netEC', 'netD', 'netRP', 'netRC']
-        self.build_optimizer()
 
         self.margin = 1.0
 
