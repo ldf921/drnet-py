@@ -7,6 +7,7 @@ from torch import nn
 from utils import utils
 from .discriminator import Discriminator
 from .base import Model
+from .triplet import ContentEncoder, triplet_loss
 
 
 def to_heatmap(pose, sigma=2):
@@ -70,6 +71,73 @@ class CGAN(Model):
 
         dis_content = (self.gan_loss(self.netRC(torch.cat([x_fake.detach(), x_c], dim=1)), real=False) +
                     self.gan_loss(self.netRC(torch.cat([x[0][1], x[1][1]], dim=1)), real=True)) / 2
+        self.optimizerRC.zero_grad()
+        dis_content.backward()
+        self.optimizerRC.step()
+
+        ret = OrderedDict()
+        ret['gan_pose'] = pose_loss
+        ret['gan_content'] = content_loss
+        ret['dis_pose'] = dis_pose
+        ret['dis_content'] = dis_content
+
+        return ret
+
+
+    def gan_loss(self, preds, real=True):
+        if real:
+            return nn.BCEWithLogitsLoss()(preds, torch.ones_like(preds))
+        else:
+            return nn.BCEWithLogitsLoss()(preds, torch.zeros_like(preds))
+
+
+class CGANTriplet(Model):
+    def __init__(self, opt):
+        self.opt = opt
+        self.netEC, _, self.netD, _ = utils.get_initialized_network(opt)
+        self.netRP = Discriminator(4, 64, in_planes=17 + 3)
+        self.netRC = ContentEncoder()
+
+        self._modules = ['netEC', 'netD', 'netRP', 'netRC']
+        self.build_optimizer()
+
+        self.margin = 1.0
+
+    def train(self, x):
+        x, p = x
+
+        b = x[0].size(0)
+        x = [t.split(b // 2, dim = 0) for t in x]
+        p = [t.split(b // 2, dim = 0) for t in p]
+
+        ret = OrderedDict()
+
+        x_c = x[0][0]
+        h_p = p[1][0]
+
+        h_c = self.netEC(x_c)
+        x_fake = self.netD([h_c, h_p.unsqueeze(2).unsqueeze(3)])
+
+        h_p = to_heatmap(h_p)
+        pose_loss = self.gan_loss(self.netRP(torch.cat([x_fake, h_p], dim=1)), real=True)
+        content_loss, dis_content = triplet_loss(self.netRC, x_c, x[2][0], x_fake, margin=self.margin)
+        loss = pose_loss + content_loss
+
+        #optimizing generator (Encoder - Decoder)
+        self.optimizerEC.zero_grad()
+        self.optimizerD.zero_grad()
+        loss.backward()
+        self.optimizerEC.step()
+        self.optimizerD.step()
+
+        #optmizing pose discriminator
+        dis_pose = (self.gan_loss(self.netRP(torch.cat([x_fake.detach(), h_p], dim=1)), real=False) +
+                    self.gan_loss(self.netRP(torch.cat([x[0][1], to_heatmap(p[0][1])], dim=1)), real=True)) / 2
+        self.optimizerRP.zero_grad()
+        dis_pose.backward()
+        self.optimizerRP.step()
+
+        #optmizing content discriminator
         self.optimizerRC.zero_grad()
         dis_content.backward()
         self.optimizerRC.step()
