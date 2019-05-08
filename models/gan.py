@@ -13,7 +13,7 @@ class DrGan(Model):
         assert opt.swap_loss == "gan", "DrGan is supposed to use only for gan swap loss"
         self.opt = opt
         self.netEC, _, self.netD, _ = utils.get_initialized_network(opt)
-        self.netR = Discriminator(3, 64)
+        self.netR = Discriminator(layers=3, in_planes=3, first_out_planes=64)
         self._modules = ['netEC', 'netD', 'netR']
 
     def train_gan(self, criterions, x):

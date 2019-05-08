@@ -29,8 +29,8 @@ class CGan(Model):
         assert opt.swap_loss == "cgan", "CGan is supposed to use only for cgan swap loss"
         self.opt = opt
         self.netEC, _, self.netD, _ = utils.get_initialized_network(opt)
-        self.netRP = Discriminator(4, 64, in_planes=17 + 3)
-        self.netRC = Discriminator(4, 64, in_planes=3 * 2)
+        self.netRP = Discriminator(layers=4, in_planes=17 + 3, first_out_planes=64)
+        self.netRC = Discriminator(layers=4, in_planes=3 * 2, first_out_planes=64)
 
         self._modules = ['netEC', 'netD', 'netRP', 'netRC']
 
