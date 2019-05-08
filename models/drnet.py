@@ -1,11 +1,12 @@
 import torch
 from torch.autograd import Variable
-
-from utils import utils
 from collections import OrderedDict
 
+from utils import utils
+from .base import Model
 
-class DrNet(object):
+
+class DrNet(Model):
     def __init__(self, opt):
         self.opt = opt
         if self.opt.pose:
