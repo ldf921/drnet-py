@@ -10,7 +10,7 @@ from .base import Model
 class DrGan(Model):
     def __init__(self, opt):
         assert opt.pose, "must use pose code"
-        assert opt.swap_loss == "gan", "only gan swap loss implemented"
+        assert opt.swap_loss == "gan", "DrGan is supposed to use only for gan swap loss"
         self.opt = opt
         self.netEC, _, self.netD, _ = utils.get_initialized_network(opt)
         self.netR = Discriminator(3, 64)

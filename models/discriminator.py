@@ -9,7 +9,7 @@ def conv_bn_relu(in_planes, out_planes, kernel_size, stride, padding):
             )
 
 class Discriminator(nn.Module):
-    def __init__(self, layers, nf, in_planes = 3):
+    def __init__(self, layers, nf, in_planes=3):
         super().__init__()
 
         modules = [conv_bn_relu(in_planes, nf, 4, 2, 1)]

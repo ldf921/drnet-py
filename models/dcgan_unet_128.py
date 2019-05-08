@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+
 class dcgan_conv(nn.Module):
     def __init__(self, nin, nout):
         super(dcgan_conv, self).__init__()
@@ -14,6 +15,7 @@ class dcgan_conv(nn.Module):
         return self.main(input)
 
 
+
 class dcgan_upconv(nn.Module):
     def __init__(self, nin, nout):
         super(dcgan_upconv, self).__init__()
@@ -25,6 +27,7 @@ class dcgan_upconv(nn.Module):
 
     def forward(self, input):
         return self.main(input)
+
 
 class content_encoder(nn.Module):
     def __init__(self, content_dim, nc=1):
@@ -48,6 +51,9 @@ class content_encoder(nn.Module):
                 )
 
     def forward(self, input):
+        """
+        :return: [final output, all intermediate layer feature maps]
+        """
         h1 = self.c1(input)
         h2 = self.c2(h1)
         h3 = self.c3(h2)
@@ -83,6 +89,9 @@ class decoder(nn.Module):
                 )
 
     def forward(self, input):
+        """
+        :input: [content, pose] where `content` is further decomposed into [final output, all intermediate feature maps]
+        """
         content, pose = input
         content, skip = content
         d1 = self.upc1(torch.cat([content, pose], 1))

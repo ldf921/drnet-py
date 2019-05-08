@@ -19,31 +19,27 @@ def to_heatmap(pose, sigma=2):
     partition = 2 * math.pi * sigma ** 2
     sigma = sigma / ((size - 1) / 2)
     pose = pose.narrow(1, 1, 34).view(b, p, 2)
-    hm = torch.exp(-torch.sum((grid - pose.unsqueeze(2).unsqueeze(3)) ** 2, dim = 4) / (2 * sigma ** 2)) / partition
+    hm = torch.exp(-torch.sum((grid - pose.unsqueeze(2).unsqueeze(3)) ** 2, dim=4) / (2 * sigma ** 2)) / partition
     return hm
 
 
 class CGan(Model):
     def __init__(self, opt):
+        assert opt.pose, "must use pose code"
+        assert opt.swap_loss == "cgan", "CGan is supposed to use only for cgan swap loss"
         self.opt = opt
         self.netEC, _, self.netD, _ = utils.get_initialized_network(opt)
         self.netRP = Discriminator(4, 64, in_planes=17 + 3)
         self.netRC = Discriminator(4, 64, in_planes=3 * 2)
 
         self._modules = ['netEC', 'netD', 'netRP', 'netRC']
-        self.build_optimizer()
 
     def train(self, criterions, x):
-        opt = self.opt
-        mse_criterion, bce_criterion = criterions
-
         x, p = x
 
         b = x[0].size(0)
-        x = [t.split(b // 2, dim = 0) for t in x]
-        p = [t.split(b // 2, dim = 0) for t in p]
-
-        ret = OrderedDict()
+        x = [t.split(b // 2, dim=0) for t in x]
+        p = [t.split(b // 2, dim=0) for t in p]
 
         x_c = x[0][0]
         h_p = p[1][0]
@@ -69,7 +65,7 @@ class CGan(Model):
         self.optimizerRP.step()
 
         dis_content = (self.gan_loss(self.netRC(torch.cat([x_fake.detach(), x_c], dim=1)), real=False) +
-                    self.gan_loss(self.netRC(torch.cat([x[0][1], x[1][1]], dim=1)), real=True)) / 2
+                       self.gan_loss(self.netRC(torch.cat([x[0][1], x[1][1]], dim=1)), real=True)) / 2
         self.optimizerRC.zero_grad()
         dis_content.backward()
         self.optimizerRC.step()
@@ -81,7 +77,6 @@ class CGan(Model):
         ret['dis_content'] = dis_content
 
         return ret
-
 
     def gan_loss(self, preds, real=True):
         if real:
