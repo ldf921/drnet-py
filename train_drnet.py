@@ -1,21 +1,17 @@
-from collections import OrderedDict
-
 import torch
-import torch.optim as optim
 import torch.nn as nn
 import argparse
 import os
 import random
-from torch.autograd import Variable
 from shutil import copyfile
 from tqdm import tqdm
-from typing import Tuple
 
 import valid
 from utils import utils
 from utils.metrics import Summary
-from models.gan import DRGAN
-from models.cgan import CGAN
+from models.gan import DrGan
+from models.drnet import DrNet
+from models.cgan import CGan
 
 
 parser = argparse.ArgumentParser()
@@ -51,191 +47,21 @@ parser.add_argument('--swap_loss', default=None, type=str)
 opt = None
 
 
-def get_optimizers(opt, models: Tuple[nn.Module]) -> Tuple[optim.Optimizer]:
-    """
-    :return: get a optimizer for each of the network with optimizer type, learning rate, and beta1 set as in `opt`
-    """
-    netEC, netEP, netD, netC = models
-    if opt.optimizer == 'adam':
-        opt.optimizer = optim.Adam
-    elif opt.optimizer == 'rmsprop':
-        opt.optimizer = optim.RMSprop
-    elif opt.optimizer == 'sgd':
-        opt.optimizer = optim.SGD
-    else:
-        raise ValueError('Unknown optimizer: %s' % opt.optimizer)
-
-    optimizerEC = opt.optimizer(netEC.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
-    optimizerEP = opt.optimizer(netEP.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
-    optimizerD = opt.optimizer(netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
-    optimizerC = opt.optimizer(netC.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
-    return optimizerEC, optimizerEP, optimizerD, optimizerC
-
-
-# --------- training functions ------------------------------------
-def train_pose(models, optimizers, criterions, x):
-    netEC, netEP, netD, _ = models
-    optimizerEC, optimizerEP, optimizerD, _ = optimizers
-    mse_criterion, bce_criterion = criterions
-
-    x, p = x
-    netEP.zero_grad()
-    netEC.zero_grad()
-    netD.zero_grad()
-
-    x_c1 = x[0]
-    x_c2 = x[1]
-    x_p1 = x[2]
-    x_p2 = x[3]
-
-    h_p1 = p[2]
-    h_p2 = p[3]
-    h_p1 = h_p1.unsqueeze(2).unsqueeze(3)
-
-    h_c1 = netEC(x_c1)
-    with torch.no_grad():
-        h_c2f = netEC(x_c2)
-        h_c2 = h_c2f[0] if opt.content_model[-4:] == 'unet' else h_c2f  # used as target for sim loss
-
-    # similarity loss: ||h_c1 - h_c2||
-    sim_loss = mse_criterion(h_c1[0] if opt.content_model[-4:] == 'unet' else h_c1, h_c2)
-
-    # reconstruction loss: ||D(h_c1, h_p1), x_p1||
-    rec = netD([h_c1, h_p1])
-    rec_loss = mse_criterion(rec, x_p1)
-
-    # scene discriminator loss: maximize entropy of output
-    # target = torch.cuda.FloatTensor(opt.batch_size, 1).fill_(0.5)
-    # out = netC([h_p1, h_p2])
-    # sd_loss = bce_criterion(out, Variable(target))
-
-    # full loss
-    # loss = sim_loss + rec_loss + opt.sd_weight*sd_loss
-    loss = sim_loss + rec_loss
-    loss.backward()
-    optimizerEC.step()
-    optimizerEP.step()
-    optimizerD.step()
-
-    ret = OrderedDict()
-    ret['sim_loss'] = sim_loss
-    ret['rec_loss'] = rec_loss
-
-    if opt.swap_loss is not None:
-        ''' reconstruct using another pose code
-        '''
-        with torch.no_grad():
-            h_c2 = netEC(x_c2)
-        h_p2 = h_p2.flip(dims=[0]).unsqueeze(2).unsqueeze(3)
-        swap_rec = netD([h_c2, h_p2])
-        h_c2_swap = netEC(swap_rec)
-        swap_rec_loss = mse_criterion(h_c2_swap[0], h_c2[0])
-
-        optimizerD.zero_grad()
-        if opt.swap_loss == 'content':
-            swap_rec_loss.backward()
-            ret['swap_loss'] = swap_rec_loss
-        else:
-            raise NotImplementedError
-        optimizerD.step()
-
-    return ret
-
-
-def train_encoder_decoder(models, optimizers, criterions, x):
-    netEC, netEP, netD, netC = models
-    optimizerEC, optimizerEP, optimizerD, optimizerC = optimizers
-    mse_criterion, bce_criterion = criterions
-
-    netEP.zero_grad()
-    netEC.zero_grad()
-    netD.zero_grad()
-
-    x_c1 = x[0]
-    x_c2 = x[1]
-    x_p1 = x[2]
-    x_p2 = x[3]
-
-    h_c1 = netEC(x_c1)
-    h_c2 = netEC(x_c2)[0].detach() if opt.content_model[-4:] == 'unet' else netEC(x_c2).detach()  # used as target for sim loss
-    h_p1 = netEP(x_p1)  # used for scene discriminator
-    h_p2 = netEP(x_p2).detach()
-
-    # similarity loss: ||h_c1 - h_c2||
-    sim_loss = mse_criterion(h_c1[0] if opt.content_model[-4:] == 'unet' else h_c1, h_c2)
-
-    # reconstruction loss: ||D(h_c1, h_p1), x_p1||
-    rec = netD([h_c1, h_p1])
-    rec_loss = mse_criterion(rec, x_p1)
-
-    # scene discriminator loss: maximize entropy of output
-    target = torch.cuda.FloatTensor(opt.batch_size, 1).fill_(0.5)
-    out = netC([h_p1, h_p2])
-    sd_loss = bce_criterion(out, Variable(target))
-
-    # full loss
-    loss = sim_loss + rec_loss + opt.sd_weight*sd_loss
-    loss.backward()
-
-    optimizerEC.step()
-    optimizerEP.step()
-    optimizerD.step()
-
-    return sim_loss.data.cpu().numpy(), rec_loss.data.cpu().numpy()
-
-
-def train_scene_discriminator(models, optimizers, criterions, x):
-    netEC, netEP, netD, netC = models
-    optimizerEC, optimizerEP, optimizerD, optimizerC = optimizers
-    mse_criterion, bce_criterion = criterions
-
-    netC.zero_grad()
-    target = torch.cuda.FloatTensor(opt.batch_size, 1)
-
-    x1 = x[0]
-    x2 = x[1]
-    h_p1 = netEP(x1).detach()
-    h_p2 = netEP(x2).detach()
-
-    half = int(opt.batch_size/2)
-    rp = torch.randperm(half).cuda()
-    h_p2[:half] = h_p2[rp]
-    target[:half] = 1
-    target[half:] = 0
-
-    out = netC([h_p1, h_p2])
-    bce = bce_criterion(out, Variable(target))
-
-    bce.backward()
-    optimizerC.step()
-
-    acc = out[:half].gt(0.5).sum() + out[half:].le(0.5).sum()
-    return bce.data.cpu().numpy(), acc.data.cpu().numpy()/opt.batch_size
-
-def print_log(msg, f):
-    print(msg)
-    print(msg, file = f)
-    f.flush()
-
-# --------- training loop ------------------------------------
 def main():
     # load dataset
     train_loader, test_loader = utils.get_normalized_dataloader(opt)
 
-    # get networks, criterions and optimizers
+    # get networks and corresponding optimizers
     if opt.swap_loss == 'gan':
-        models = DRGAN(opt)
-        using_framework = True
+        models = DrGan(opt)
     elif opt.swap_loss == 'cgan':
-        models = CGAN(opt)
-        using_framework = True
+        models = CGan(opt)
     else:
-        netEC, netEP, netD, netC = utils.get_initialized_network(opt)
-        models = (netEC, netEP, netD, netC)
-        using_framework = False
-    for model in models:
-        model.cuda()
+        models = DrNet(opt)
+    models.cuda()
+    models.build_optimizer()  # optimizers should be built after moving models to gpu
 
+    # get criterions
     mse_criterion = nn.MSELoss()
     bce_criterion = nn.BCELoss()
     criterions = (mse_criterion, bce_criterion)
@@ -243,48 +69,25 @@ def main():
         criterion.cuda()
 
     # optimizer should be constructed after moving net to the device
-    if not using_framework:
-        optimizerEC, optimizerEP, optimizerD, optimizerC = get_optimizers(opt, models)
-        optimizers = (optimizerEC, optimizerEP, optimizerD, optimizerC)
-
     with open(os.path.join(opt.log_dir, 'log'), 'a') as fo:
         for epoch in range(opt.niter):
             # ---- train phase
-            for model in models:
-                model.train()
-
-            epoch_sim_loss, epoch_rec_loss, epoch_sd_loss, epoch_sd_acc = 0, 0, 0, 0
+            models.train()
 
             summary = Summary()
             for batch_idx, x in tqdm(enumerate(train_loader)):
-                # train scene discriminator
-                if using_framework:
-                    summary.update(models.train(criterions, x))
+                if opt.swap_loss == "gan" and opt.pose:
+                    summary.update(models.train_gan(criterions, x))
                 elif opt.pose:
-                    summary.update(train_pose(models, optimizers, criterions, x))
+                    summary.update(models.train_pose(criterions, x))
                 else:
-                    sd_loss, sd_acc = train_scene_discriminator(models, optimizers, criterions, x)
-                    epoch_sd_loss += sd_loss
-                    epoch_sd_acc += sd_acc
+                    summary.update(models.train_scene_discriminator(criterions, x))
+                    summary.update(models.train_encoder_decoder(criterions, x))
 
-                    # train main model
-                    sim_loss, rec_loss = train_encoder_decoder(models, optimizers, criterions, x)
-                    epoch_sim_loss += sim_loss
-                    epoch_rec_loss += rec_loss
-
-            if opt.pose:
-                print_log(f"[Epoch {epoch:03d}] {summary.format()}", fo)
-            else:
-                epoch_rec_loss = epoch_rec_loss/len(train_loader)
-                epoch_sim_loss = epoch_sim_loss/len(train_loader)
-                epoch_sd_acc = 100 * epoch_sd_acc/len(train_loader)
-                ttl_samples = epoch * len(train_loader) * opt.batch_size
-                print_log(f"{epoch: 02d} rec loss:{epoch_rec_loss:.4f} | sim loss: {epoch_sim_loss:.4f} | "
-                      f"scene disc acc: {epoch_sd_acc:.3f}% ({ttl_samples})", fo)
+            utils.print_write_log(f"[Epoch {epoch:03d}] {summary.format()}", fo)
 
             # ---- eval phase
-            for model in models:
-                model.eval()
+            models.eval()
 
             x = next(iter(test_loader))
             img = utils.plot_rec(opt.pose, models, x, opt.max_step)
@@ -297,16 +100,12 @@ def main():
 
             # save the model
             cp_path = f"{opt.log_dir}/model.pth"
-            if using_framework:
-                models.save(cp_path)
-            else:
-                torch.save(
-                    {'netD': netD, 'netEP': netEP, 'netEC': netEC, 'opt': opt},
-                    cp_path
-                )
-
+            models.save(cp_path)
             if epoch % 15 == 0:
-                copyfile('%s/model.pth' % opt.log_dir, '%s/model-%d.pth' % (opt.log_dir, epoch))
+                copyfile(
+                    os.path.join(opt.log_dir, "model.pth"),
+                    os.path.join(opt.log_dir, f"model-{epoch}.pth")
+                )
 
 
 def test():

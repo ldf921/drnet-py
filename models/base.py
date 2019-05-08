@@ -1,12 +1,25 @@
 import torch
 from utils import utils
 
-class Model:
+
+class Model(object):
     def named_modules(self):
-        return [ (name, getattr(self, name)) for name in self._modules]
+        return [(name, getattr(self, name)) for name in self._modules]
 
     def modules(self):
-        return map(lambda name : getattr(self, name), self._modules)
+        return map(lambda name: getattr(self, name), self._modules)
+
+    def cuda(self):
+        for module in self.modules():
+            module.cuda()
+
+    def train(self):
+        for module in self.modules():
+            module.train()
+
+    def eval(self):
+        for module in self.modules():
+            module.eval()
 
     def __iter__(self):
         return self.modules()

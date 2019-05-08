@@ -289,6 +289,12 @@ def init_weights(m):
         m.bias.data.fill_(0)
 
 
+def print_write_log(msg, f):
+    print(msg)
+    print(msg, file=f)
+    f.flush()
+
+
 # --------- plotting functions ------------------------------------
 def plot_rec(pose, models, x, max_step):
     try:
