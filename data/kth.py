@@ -133,7 +133,7 @@ class KTH(object):
             kp = np.ones(35)
         else:
             kp = np.array(pose_dict['keypoints'])
-            kp = (kp[self.kp_mask] / (self.image_size / 2)) - 1
+            kp = (kp[self.kp_mask] / ((self.image_size - 1) / 2)) - 1
             kp = np.concatenate([[0,], kp])
         return kp
 

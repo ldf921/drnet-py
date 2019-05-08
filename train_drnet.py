@@ -11,6 +11,7 @@ from utils import utils
 from utils.metrics import Summary
 from models.gan import DrGan
 from models.drnet import DrNet
+from models.cgan import CGan
 
 
 parser = argparse.ArgumentParser()
@@ -53,6 +54,8 @@ def main():
     # get networks and corresponding optimizers
     if opt.swap_loss == 'gan':
         models = DrGan(opt)
+    elif opt.swap_loss == 'cgan':
+        models = CGan(opt)
     else:
         models = DrNet(opt)
     models.cuda()
