@@ -103,10 +103,8 @@ class CGanTriplet(Model):
         x, p = x
 
         b = x[0].size(0)
-        x = [t.split(b // 2, dim = 0) for t in x]
-        p = [t.split(b // 2, dim = 0) for t in p]
-
-        ret = OrderedDict()
+        x = [t.split(b // 2, dim=0) for t in x]
+        p = [t.split(b // 2, dim=0) for t in p]
 
         x_c = x[0][0]
         h_p = p[1][0]

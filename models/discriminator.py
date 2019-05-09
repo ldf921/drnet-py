@@ -14,8 +14,8 @@ class Discriminator(nn.Module):
         """
         :param layers: number of `conv_bn_relu` blocks
         :param in_planes: input number of channels
-        :param first_out_planes: first block number of channels, thus final output would have `out_planes * 2 ** (layers - 1)`
-                           channels
+        :param first_out_planes: first block number of channels
+                                 thus final output would have `out_planes * 2 ** (layers - 1)` channels
         """
         super().__init__()
         modules = [conv_bn_relu(in_planes, first_out_planes, 4, 2, 1)]
