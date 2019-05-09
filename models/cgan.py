@@ -98,8 +98,7 @@ class CGanTriplet(Model):
         self.netRC = ContentEncoder()
 
         self._modules = ['netEC', 'netD', 'netRP', 'netRC']
-        # TODO: add margin to YAML config
-        self.margin = 1.0
+        self.margin = self.opt.cgan_triplet["margin"]
 
     def train(self, x):
         x, p = x

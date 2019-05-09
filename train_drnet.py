@@ -1,10 +1,10 @@
 import torch
-import torch.nn as nn
 import argparse
 import os
 import random
 from shutil import copyfile
 from tqdm import tqdm
+import yaml
 
 import valid
 from utils import utils
@@ -112,8 +112,14 @@ def test():
 
 
 if __name__ == "__main__":
-    # load arguments
+    # load command line arguments and combine with yaml configurations
     opt = parser.parse_args()
+    with open("config.yaml", "r") as f:
+        config = yaml.load(f)
+    from argparse import Namespace
+    opt = Namespace(**vars(opt), **config)  # combine two dicts
+
+    # set saving directory
     name = (f"content_model={opt.content_model}-"
             f"pose_model={opt.pose_model}-"
             f"content_dim={opt.content_dim}-"
