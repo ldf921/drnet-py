@@ -4,7 +4,7 @@ from utils import utils
 
 class Model(object):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__()
         self._modules = []
         self._criterions = []
 
