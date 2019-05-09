@@ -14,7 +14,7 @@ def to_heatmap(pose, sigma=2):
     b = pose.size(0)
     size = 128
     p = 17
-    identity = torch.Tensor([[[1, 0, 0], [0, 1, 0]]]).float()# .cuda()
+    identity = torch.Tensor([[[1, 0, 0], [0, 1, 0]]]).float().cuda()
     grid = torch.affine_grid_generator(identity.repeat(1, 1, 1), size=[1, 1, size, size])
     grid = grid.repeat(b, p, 1, 1, 1)
     partition = 2 * math.pi * sigma ** 2
@@ -28,6 +28,7 @@ class CGan(Model):
     def __init__(self, opt):
         assert opt.pose, "must use pose code"
         assert opt.swap_loss == "cgan", "CGan is supposed to use only for cgan swap loss"
+        super().__init__(opt)
         self.opt = opt
         self.netEC, _, self.netD, _ = utils.get_initialized_network(opt)
         self.netRP = Discriminator(layers=4, in_planes=17 + 3, first_out_planes=64)
@@ -35,7 +36,7 @@ class CGan(Model):
 
         self._modules = ['netEC', 'netD', 'netRP', 'netRC']
 
-    def train(self, criterions, x):
+    def train(self, x):
         x, p = x
 
         b = x[0].size(0)
@@ -89,14 +90,15 @@ class CGan(Model):
 class CGanTriplet(Model):
     def __init__(self, opt):
         assert opt.pose, "must use pose code"
-        assert opt.swap_loss == "cgan-triplet", "CGan is supposed to use only for cgan swap loss"
+        assert opt.swap_loss == "cgan-triplet", "CGanTriplet is supposed to use only for `cgan-triplet` swap loss"
+        super().__init__(opt)
         self.opt = opt
         self.netEC, _, self.netD, _ = utils.get_initialized_network(opt)
         self.netRP = Discriminator(layers=4, in_planes=17 + 3, first_out_planes=64)
         self.netRC = ContentEncoder()
 
         self._modules = ['netEC', 'netD', 'netRP', 'netRC']
-
+        # TODO: add margin to YAML config
         self.margin = 1.0
 
     def train(self, x):
@@ -117,21 +119,21 @@ class CGanTriplet(Model):
         content_loss, dis_content = triplet_loss(self.netRC, x_c, x[2][0], x_fake, margin=self.margin)
         loss = pose_loss + content_loss
 
-        #optimizing generator (Encoder - Decoder)
+        # optimizing generator (Encoder - Decoder)
         self.optimizerEC.zero_grad()
         self.optimizerD.zero_grad()
         loss.backward()
         self.optimizerEC.step()
         self.optimizerD.step()
 
-        #optmizing pose discriminator
+        # optimizing pose discriminator
         dis_pose = (self.gan_loss(self.netRP(torch.cat([x_fake.detach(), h_p], dim=1)), real=False) +
                     self.gan_loss(self.netRP(torch.cat([x[0][1], to_heatmap(p[0][1])], dim=1)), real=True)) / 2
         self.optimizerRP.zero_grad()
         dis_pose.backward()
         self.optimizerRP.step()
 
-        #optmizing content discriminator
+        # optimizing content discriminator
         self.optimizerRC.zero_grad()
         dis_content.backward()
         self.optimizerRC.step()
@@ -143,7 +145,6 @@ class CGanTriplet(Model):
         ret['dis_content'] = dis_content
 
         return ret
-
 
     def gan_loss(self, preds, real=True):
         if real:

@@ -3,26 +3,36 @@ from utils import utils
 
 
 class Model(object):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._modules = []
+        self._criterions = []
+
     def named_modules(self):
         return [(name, getattr(self, name)) for name in self._modules]
 
     def modules(self):
         return map(lambda name: getattr(self, name), self._modules)
 
+    def named_criterions(self):
+        return [(name, getattr(self, name)) for name in self._criterions]
+
+    def criterions(self):
+        return map(lambda name: getattr(self, name), self._criterions)
+
     def cuda(self):
         for module in self.modules():
             module.cuda()
+        for criterion in self.criterions():
+            criterion.cuda()
 
-    def train(self):
+    def set_all_train(self):
         for module in self.modules():
             module.train()
 
-    def eval(self):
+    def set_all_eval(self):
         for module in self.modules():
             module.eval()
-
-    def __iter__(self):
-        return self.modules()
 
     def build_optimizer(self):
         for name, module in self.named_modules():

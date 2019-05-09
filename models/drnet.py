@@ -1,6 +1,7 @@
 import torch
 from torch.autograd import Variable
 from collections import OrderedDict
+from torch import nn
 
 from utils import utils
 from .base import Model
@@ -8,6 +9,8 @@ from .base import Model
 
 class DrNet(Model):
     def __init__(self, opt):
+        assert opt.swap_loss is None, "swap loss must be none for DrNet"
+        super().__init__(opt)
         self.opt = opt
         if self.opt.pose:
             self.netEC, _, self.netD, _ = utils.get_initialized_network(self.opt)
@@ -15,13 +18,21 @@ class DrNet(Model):
         else:
             self.netEC, self.netEP, self.netD, self.netC = utils.get_initialized_network(self.opt)
             self._modules = ["netEC", "netEP", "netD", "netC"]
+        self.mse_criterion, self.bce_criterion = nn.MSELoss(), nn.BCELoss()
+        self._criterions = ["mse_criterion", "bce_criterion"]
 
-    def train_pose(self, criterions, x):
+    def train(self, x):
+        if self.opt.pose:
+            return self.train_pose(x)
+        else:
+            return self.train_scene_discriminator(x) + self.train_encoder_decoder(x)
+
+    def train_pose(self, x):
         """
+        training assuming the pose code has been pre-extracted
         :return: sim_loss, rec_loss and swap_loss if specified in the option
         """
         opt = self.opt
-        mse_criterion, bce_criterion = criterions
         ret = OrderedDict()
 
         x, p = x
@@ -46,11 +57,11 @@ class DrNet(Model):
         rec = self.netD([h_c0, h_p2])
 
         # similarity loss: ||h_c0 - h_c1||
-        sim_loss = mse_criterion(h_c0[0] if opt.content_model[-4:] == 'unet' else h_c0, h_c1)
+        sim_loss = self.mse_criterion(h_c0[0] if opt.content_model[-4:] == 'unet' else h_c0, h_c1)
         ret['sim_loss'] = sim_loss.item()
 
         # reconstruction loss: ||D(h_c0, h_p2), x_2||
-        rec_loss = mse_criterion(rec, x_2)
+        rec_loss = self.mse_criterion(rec, x_2)
         ret['rec_loss'] = rec_loss.item()
 
         # full loss = sim_loss + rec_loss
@@ -69,7 +80,7 @@ class DrNet(Model):
             h_p3 = h_p3.flip(dims=[0]).unsqueeze(2).unsqueeze(3)
             swap_rec = self.netD([h_c1, h_p3])
             h_swap_c = self.netEC(swap_rec)
-            swap_rec_loss = mse_criterion(h_swap_c[0], h_c1[0])
+            swap_rec_loss = self.mse_criterion(h_swap_c[0], h_c1[0])
             ret['swap_loss'] = swap_rec_loss.item()
 
             self.optimizerD.zero_grad()
@@ -77,11 +88,11 @@ class DrNet(Model):
             self.optimizerD.step()
         return ret
 
-    def train_encoder_decoder(self, criterions, x):
+    def train_encoder_decoder(self, x):
         """
+        train the encoder-decoder cycle
         :return: `sim_loss` and `rec_loss`
         """
-        mse_criterion, bce_criterion = criterions
         ret = OrderedDict()
 
         x_c1 = x[0]
@@ -98,17 +109,17 @@ class DrNet(Model):
         rec = self.netD([h_c1, h_p1])
 
         # similarity loss: ||h_c1 - h_c2||
-        sim_loss = mse_criterion(h_c1[0] if self.opt.content_model[-4:] == 'unet' else h_c1, h_c2)
+        sim_loss = self.mse_criterion(h_c1[0] if self.opt.content_model[-4:] == 'unet' else h_c1, h_c2)
         ret["sim_loss"] = sim_loss.item()
 
         # reconstruction loss: ||D(h_c1, h_p1), x_p1||
-        rec_loss = mse_criterion(rec, x_p1)
+        rec_loss = self.mse_criterion(rec, x_p1)
         ret["rec_loss"] = rec_loss.item()
 
         # scene discriminator loss: maximize entropy of output
         target = torch.cuda.FloatTensor(self.opt.batch_size, 1).fill_(0.5)
         out = self.netC([h_p1, h_p2])
-        sd_loss = bce_criterion(out, Variable(target))
+        sd_loss = self.bce_criterion(out, Variable(target))
         loss = sim_loss + rec_loss + self.opt.sd_weight*sd_loss
 
         # full loss
@@ -124,6 +135,7 @@ class DrNet(Model):
 
     def train_scene_discriminator(self, criterions, x):
         """
+        train the scene discriminator
         :return: `bce` and `acc`
         """
         mse_criterion, bce_criterion = criterions

@@ -11,14 +11,17 @@ class DrGan(Model):
     def __init__(self, opt):
         assert opt.pose, "must use pose code"
         assert opt.swap_loss == "gan", "DrGan is supposed to use only for gan swap loss"
+        super().__init__(opt)
         self.opt = opt
         self.netEC, _, self.netD, _ = utils.get_initialized_network(opt)
         self.netR = Discriminator(layers=3, in_planes=3, first_out_planes=64)
-        self._modules = ['netEC', 'netD', 'netR']
+        self.mse_criterion, self.bce_criterion = nn.MSELoss(), nn.BCELoss()
 
-    def train_gan(self, criterions, x):
+        self._modules = ['netEC', 'netD', 'netR']
+        self._criterions = ["mse_criterion", "bce_criterion"]
+
+    def train(self, x):
         opt = self.opt
-        mse_criterion, bce_criterion = criterions
         ret = OrderedDict()
 
         x, p = x
@@ -43,11 +46,11 @@ class DrGan(Model):
         rec = self.netD([h_c1, h_p1])
 
         # similarity loss: ||h_c1 - h_c2||
-        sim_loss = mse_criterion(h_c1[0] if opt.content_model[-4:] == 'unet' else h_c1, h_c2)
+        sim_loss = self.mse_criterion(h_c1[0] if opt.content_model[-4:] == 'unet' else h_c1, h_c2)
         ret['sim_loss'] = sim_loss.item()
 
         # reconstruction loss: ||D(h_c1, h_p1), x_p1||
-        rec_loss = mse_criterion(rec, x_p1)
+        rec_loss = self.mse_criterion(rec, x_p1)
         ret['rec_loss'] = rec_loss.item()
 
         # sum of similarity loss and reconstruction loss

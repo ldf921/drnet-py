@@ -63,33 +63,20 @@ def main():
     models.cuda()
     models.build_optimizer()  # optimizers should be built after moving models to gpu
 
-    # get criterions
-    mse_criterion = nn.MSELoss()
-    bce_criterion = nn.BCELoss()
-    criterions = (mse_criterion, bce_criterion)
-    for criterion in criterions:
-        criterion.cuda()
-
     # optimizer should be constructed after moving net to the device
     with open(os.path.join(opt.log_dir, 'log'), 'a') as fo:
         for epoch in range(opt.niter):
             # ---- train phase
-            models.train()
+            models.set_all_train()
 
             summary = Summary()
             for batch_idx, x in tqdm(enumerate(train_loader)):
-                if opt.swap_loss == "gan" and opt.pose:
-                    summary.update(models.train_gan(criterions, x))
-                elif opt.pose:
-                    summary.update(models.train_pose(criterions, x))
-                else:
-                    summary.update(models.train_scene_discriminator(criterions, x))
-                    summary.update(models.train_encoder_decoder(criterions, x))
+                summary.update(models.train(x))
 
             utils.print_write_log(f"[Epoch {epoch:03d}] {summary.format()}", fo)
 
             # ---- eval phase
-            models.eval()
+            models.set_all_eval()
 
             x = next(iter(test_loader))
             img = utils.plot_rec(opt.pose, models, x, opt.max_step)
